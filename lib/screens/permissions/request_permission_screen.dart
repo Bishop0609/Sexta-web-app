@@ -174,14 +174,29 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
+      final startDateFormatted = DateFormat('dd/MM/yyyy').format(_startDate!);
+      final endDateFormatted = DateFormat('dd/MM/yyyy').format(_endDate!);
+      final reason = _reasonController.text.trim();
+
+      // Enviar email de confirmación al solicitante
+      if (userProfile.email != null && userProfile.email!.isNotEmpty) {
+        await _emailService.sendPermissionSubmittedConfirmation(
+          userEmail: userProfile.email!,
+          firefighterName: userProfile.fullName,
+          startDate: startDateFormatted,
+          endDate: endDateFormatted,
+          reason: reason,
+        );
+      }
+
       // Enviar email de notificación a oficiales
       // TODO: Obtener emails de oficiales desde BD
       await _emailService.sendPermissionRequestNotification(
-        officerEmail: 'oficiales@sexta.cl', // Placeholder
+        officerEmail: ['gunthersoft.apps@gmail.com'], // Lista de emails temporales de prueba
         firefighterName: userProfile.fullName,
-        startDate: DateFormat('dd/MM/yyyy').format(_startDate!),
-        endDate: DateFormat('dd/MM/yyyy').format(_endDate!),
-        reason: _reasonController.text.trim(),
+        startDate: startDateFormatted,
+        endDate: endDateFormatted,
+        reason: reason,
       );
 
       if (mounted) {

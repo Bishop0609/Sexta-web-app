@@ -58,8 +58,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Load user profile to get role
       final user = await _supabase.getUserProfile(userId);
       
-      final kpi = await _attendanceService.calculateIndividualStats(userId);
-      final monthly = await _attendanceService.calculateCompanyMonthlyStats();
+      // NEW: Load citation and emergency stats instead of efectiva/abono
+      final kpi = await _attendanceService.calculateCitationAndEmergencyStats(userId);
+      final monthly = await _attendanceService.calculateMonthlyAttendanceByType(userId);
       final ranking = await _attendanceService.getAttendanceRanking();
       final alerts = await _attendanceService.getLowAttendanceAlerts();
       final activities = await _supabase.getWeeklyActivities(_currentWeekStart);
@@ -151,9 +152,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildIndividualKpiCard() {
     if (_individualKpi == null) return const SizedBox();
 
-    final efectivaPct = _individualKpi!['efectiva_pct'] as double;
-    final abonoPct = _individualKpi!['abono_pct'] as double;
-    final total = _individualKpi!['total'] as int;
+    final citationPct = _individualKpi!['citation_pct'] as double;
+    final emergencyPct = _individualKpi!['emergency_pct'] as double;
+    final citationCount = _individualKpi!['citation_count'] as int;
+    final emergencyCount = _individualKpi!['emergency_count'] as int;
+    final totalCitations = _individualKpi!['total_citation_events'] as int;
+    final totalEmergencies = _individualKpi!['total_emergency_events'] as int;
+    final monthName = _individualKpi!['month_name'] as String;
 
     return Card(
       child: Padding(
@@ -162,74 +167,148 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Mi Desempeño',
+              'Mi Desempeño - $monthName',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                // Pie chart
-                SizedBox(
-                  width: 150,
-                  height: 150,
-                  child: PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          value: efectivaPct,
-                          color: AppTheme.efectivaColor,
-                          title: '${efectivaPct.toStringAsFixed(1)}%',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          radius: 60,
-                        ),
-                        PieChartSectionData(
-                          value: abonoPct,
-                          color: AppTheme.abonoColor,
-                          title: '${abonoPct.toStringAsFixed(1)}%',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          radius: 60,
-                        ),
-                      ],
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 32),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            
+            // Two pie charts side by side
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 600;
+                
+                if (isWide) {
+                  // Desktop: side by side
+                  return Row(
                     children: [
-                      _buildLegendItem(
-                        'Lista Efectiva',
-                        _individualKpi!['efectiva_count'] as int,
-                        AppTheme.efectivaColor,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildLegendItem(
-                        'Abonos',
-                        _individualKpi!['abono_count'] as int,
-                        AppTheme.abonoColor,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Total de asistencias: $total',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                      Expanded(child: _buildCitationChart(citationPct, citationCount, totalCitations)),
+                      const SizedBox(width: 32),
+                      Expanded(child: _buildEmergencyChart(emergencyPct, emergencyCount, totalEmergencies)),
                     ],
-                  ),
-                ),
-              ],
+                  );
+                } else {
+                  // Mobile: stacked
+                  return Column(
+                    children: [
+                      _buildCitationChart(citationPct, citationCount, totalCitations),
+                      const SizedBox(height: 24),
+                      _buildEmergencyChart(emergencyPct, emergencyCount, totalEmergencies),
+                    ],
+                  );
+                }
+              },
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCitationChart(double percentage, int attended, int total) {
+    final absentPct = 100 - percentage;
+    
+    return Column(
+      children: [
+        const Text(
+          'Asistencia a Citaciones',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: 150,
+          height: 150,
+          child: PieChart(
+            PieChartData(
+              sections: [
+                PieChartSectionData(
+                  value: percentage,
+                  color: Colors.blue,
+                  title: '${percentage.toStringAsFixed(1)}%',
+                  titleStyle: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  radius: 60,
+                ),
+                if (absentPct > 0)
+                  PieChartSectionData(
+                    value: absentPct,
+                    color: Colors.grey[300]!,
+                    title: '${absentPct.toStringAsFixed(1)}%',
+                    titleStyle: TextStyle(
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    radius: 50,
+                  ),
+              ],
+              sectionsSpace: 2,
+              centerSpaceRadius: 0,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '$attended de $total citaciones',
+          style: const TextStyle(fontSize: 14, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmergencyChart(double percentage, int attended, int total) {
+    final absentPct = 100 - percentage;
+    
+    return Column(
+      children: [
+        const Text(
+          'Asistencia a Emergencias',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: 150,
+          height: 150,
+          child: PieChart(
+            PieChartData(
+              sections: [
+                PieChartSectionData(
+                  value: percentage,
+                  color: Colors.red,
+                  title: '${percentage.toStringAsFixed(1)}%',
+                  titleStyle: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  radius: 60,
+                ),
+                if (absentPct > 0)
+                  PieChartSectionData(
+                    value: absentPct,
+                    color: Colors.grey[300]!,
+                    title: '${absentPct.toStringAsFixed(1)}%',
+                    titleStyle: TextStyle(
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    radius: 50,
+                  ),
+              ],
+              sectionsSpace: 2,
+              centerSpaceRadius: 0,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '$attended de $total emergencias',
+          style: const TextStyle(fontSize: 14, color: Colors.grey),
+        ),
+      ],
     );
   }
 
@@ -261,7 +340,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             children: [
               Text(
-                'Asistencia Compañía - Últimos 6 Meses',
+                'Mi Asistencia - Últimos 6 Meses',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 20),
@@ -279,7 +358,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Asistencia Compañía - Últimos 6 Meses',
+              'Mi Asistencia - Últimos 6 Meses',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 24),
@@ -342,9 +421,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem('Efectiva', 0, AppTheme.efectivaColor),
+                _buildLegendItem('Citaciones', 0, Colors.blue),
                 const SizedBox(width: 24),
-                _buildLegendItem('Abono', 0, AppTheme.abonoColor),
+                _buildLegendItem('Emergencias', 0, Colors.red),
               ],
             ),
           ],
@@ -360,13 +439,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         x: index,
         barRods: [
           BarChartRodData(
-            toY: (data['efectiva_count'] as int).toDouble(),
-            color: AppTheme.efectivaColor,
+            toY: (data['citation_count'] as int? ?? 0).toDouble(),
+            color: Colors.blue,
             width: 16,
           ),
           BarChartRodData(
-            toY: (data['abono_count'] as int).toDouble(),
-            color: AppTheme.abonoColor,
+            toY: (data['emergency_count'] as int? ?? 0).toDouble(),
+            color: Colors.red,
             width: 16,
           ),
         ],
@@ -377,10 +456,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _getMaxY() {
     double max = 0;
     for (final data in _monthlyStats) {
-      final efectiva = (data['efectiva_count'] as int).toDouble();
-      final abono = (data['abono_count'] as int).toDouble();
-      if (efectiva > max) max = efectiva;
-      if (abono > max) max = abono;
+      final citations = (data['citation_count'] as int? ?? 0).toDouble();
+      final emergencies = (data['emergency_count'] as int? ?? 0).toDouble();
+      if (citations > max) max = citations;
+      if (emergencies > max) max = emergencies;
     }
     return (max * 1.2).ceilToDouble();
   }

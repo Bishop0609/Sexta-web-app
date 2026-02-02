@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/models/user_model.dart';
+import 'package:sexta_app/core/permissions/role_permissions.dart';
 
-// Provider for current user
-final currentUserProvider = StateProvider<UserModel?>((ref) {
-  return AuthService().currentUser;
-});
+import 'package:sexta_app/providers/user_provider.dart';
+
+// Provider definition removed - importing from user_provider.dart
 
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key});
@@ -38,12 +38,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     
     final userEmail = currentUser?.email ?? 'usuario@sexta.cl';
     final userName = currentUser?.fullName ?? 'Usuario';
-    final userRole = currentUser?.role.name ?? 'firefighter';
+    final userRole = currentUser?.role ?? UserRole.bombero;
+    final userRoleDisplay = currentUser?.getRoleDisplayName() ?? 'Bombero';
     
     // Debug logging
-    print('🎨 AppDrawer build - User: $userName, Role: $userRole');
-    print('   Admin modules visible: ${userRole == 'admin'}');
-    print('   Officer modules visible: ${userRole == 'officer' || userRole == 'admin'}');
+    print('🎨 AppDrawer build - User: $userName, Role: ${userRole.name}');
+    print('   Role Display: $userRoleDisplay');
 
     return Drawer(
       child: Column(
@@ -113,6 +113,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                 ),
                 _buildMenuItem(
                   context,
+                  icon: Icons.business,
+                  title: 'Dashboard Compañía',
+                  route: '/company-dashboard',
+                  visible: RolePermissions.canViewDashboardCompany(userRole),
+                ),
+                _buildMenuItem(
+                  context,
                   icon: Icons.person,
                   title: 'Mi Perfil',
                   route: '/profile',
@@ -134,7 +141,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   icon: Icons.approval,
                   title: 'Gestionar Permisos',
                   route: '/manage-permissions',
-                  visible: userRole == 'officer' || userRole == 'admin',
+                  visible: RolePermissions.canManagePermissions(userRole),
                 ),
                 const Divider(),
                 
@@ -152,7 +159,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   icon: Icons.edit_note,
                   title: 'Modificar Asistencias',
                   route: '/modify-attendance',
-                  visible: userRole == 'admin',
+                  visible: RolePermissions.canModifyAttendance(userRole),
                 ),
                 const Divider(),
                 
@@ -170,14 +177,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   icon: Icons.settings,
                   title: 'Configurar Guardia',
                   route: '/shift-config',
-                  visible: userRole == 'officer' || userRole == 'admin',
+                  visible: RolePermissions.canConfigureShift(userRole),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.calendar_month,
                   title: 'Generar Rol Guardia',
                   route: '/generate-schedule',
-                  visible: userRole == 'officer' || userRole == 'admin',
+                  visible: RolePermissions.canGenerateShiftSchedule(userRole),
                 ),
                 _buildMenuItem(
                   context,
@@ -195,21 +202,35 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   icon: Icons.people,
                   title: 'Gestión de Usuarios',
                   route: '/user-management',
-                  visible: userRole == 'admin',
+                  visible: RolePermissions.canManageUsers(userRole),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.category,
                   title: 'Tipos de Acto',
                   route: '/act-types',
-                  visible: userRole == 'admin',
+                  visible: RolePermissions.canManageActTypes(userRole),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.event_note,
                   title: 'Gestionar Actividades',
                   route: '/manage-activities',
-                  visible: userRole == 'officer' || userRole == 'admin',
+                  visible: RolePermissions.canManageActivities(userRole),
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.safety_divider,
+                  title: 'Gestión de EPP',
+                  route: '/epp-management',
+                  visible: RolePermissions.canManageEPP(userRole),
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.account_balance_wallet,
+                  title: 'Tesorería',
+                  route: '/treasury',
+                  visible: RolePermissions.canAccessTreasury(userRole),
                 ),
               ],
             ),

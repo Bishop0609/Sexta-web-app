@@ -1,0 +1,255 @@
+﻿Analyzing Sexta_app...                                          
+
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:20:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:21:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:22:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:23:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:24:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:25:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:26:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:27:3 - avoid_print
+   info - Don't invoke 'print' in production code - generate_password_hash.dart:28:3 - avoid_print
+   info - 'officer' is deprecated and shouldn't be used. Use oficial1 instead - lib\core\permissions\role_permissions.dart:184:16 - deprecated_member_use_from_same_package
+   info - 'firefighter' is deprecated and shouldn't be used. Use bombero instead - lib\core\permissions\role_permissions.dart:190:57 - deprecated_member_use_from_same_package
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\core\theme\app_theme.dart:131:59 - deprecated_member_use
+warning - The declaration '_authService' isn't referenced - lib\main.dart:69:7 - unused_element
+  error - Missing concrete implementations of 'getter mixin _$ActTypeModel on Object.category', 'getter mixin _$ActTypeModel on Object.createdAt', 'getter mixin _$ActTypeModel on Object.id', 'getter mixin _$ActTypeModel on Object.isActive', and 2 more - lib\models\act_type_model.dart:17:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$PermissionModel on Object.createdAt', 'getter mixin _$PermissionModel on Object.endDate', 'getter mixin _$PermissionModel on Object.id', 'getter mixin _$PermissionModel on Object.reason', and 6 more - lib\models\permission_model.dart:13:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$ShiftAttendanceModel on Object.checkedIn', 'getter mixin _$ShiftAttendanceModel on Object.createdAt', 'getter mixin _$ShiftAttendanceModel on Object.id', 'getter mixin _$ShiftAttendanceModel on Object.isExtra', and 4 more - lib\models\shift_attendance_model.dart:7:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$ShiftRegistrationModel on Object.configId', 'getter mixin _$ShiftRegistrationModel on Object.createdAt', 'getter mixin _$ShiftRegistrationModel on Object.id', 'getter mixin _$ShiftRegistrationModel on Object.shiftDate', and 2 more - lib\models\shift_registration_model.dart:7:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$IndividualKPI on Object.abonoCount', 'getter mixin _$IndividualKPI on Object.abonoPct', 'getter mixin _$IndividualKPI on Object.efectivaCount', 'getter mixin _$IndividualKPI on Object.efectivaPct', and 3 more - lib\models\statistics_model.dart:8:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$MonthlyStats on Object.abonoCount', 'getter mixin _$MonthlyStats on Object.efectivaCount', 'getter mixin _$MonthlyStats on Object.month', 'getter mixin _$MonthlyStats on Object.year', and 1 more - lib\models\statistics_model.dart:24:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$AttendanceRanking on Object.attendancePct', 'getter mixin _$AttendanceRanking on Object.fullName', 'getter mixin _$AttendanceRanking on Object.rank', 'getter mixin _$AttendanceRanking on Object.totalEvents', and 2 more - lib\models\statistics_model.dart:38:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$LowAttendanceAlert on Object.attendancePct', 'getter mixin _$LowAttendanceAlert on Object.fullName', 'getter mixin _$LowAttendanceAlert on Object.rank', 'getter mixin _$LowAttendanceAlert on Object.severity', and 2 more - lib\models\statistics_model.dart:53:7 - non_abstract_class_inherits_abstract_member
+  error - Missing concrete implementations of 'getter mixin _$ShiftCompliance on Object.averageShiftsPerWeek', 'getter mixin _$ShiftCompliance on Object.fullName', 'getter mixin _$ShiftCompliance on Object.maritalStatus', 'getter mixin _$ShiftCompliance on Object.meetsRequirement', and 3 more - lib\models\statistics_model.dart:68:7 - non_abstract_class_inherits_abstract_member
+   info - 'officer' is deprecated and shouldn't be used. Use oficial1 instead - lib\models\user_model.dart:163:21 - deprecated_member_use_from_same_package
+   info - 'firefighter' is deprecated and shouldn't be used. Use bombero instead - lib\models\user_model.dart:165:21 - deprecated_member_use_from_same_package
+  error - The function 'StateProvider' isn't defined - lib\providers\user_provider.dart:6:29 - undefined_function
+   info - Don't invoke 'print' in production code - lib\providers\user_provider.dart:31:5 - avoid_print
+warning - The value of the field '_authService' isn't used - lib\screens\activities\manage_activities_screen.dart:21:9 - unused_field
+warning - The value of the local variable 'isEdit' isn't used - lib\screens\activities\manage_activities_screen.dart:227:11 - unused_local_variable
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:449:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:469:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:472:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:484:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:487:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:492:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:496:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\activities\manage_activities_screen.dart:499:7 - avoid_print
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\activities\manage_activities_screen.dart:600:19 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\attendance\modify_attendance_screen.dart:355:15 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\attendance\modify_attendance_screen.dart:411:44 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\attendance\modify_attendance_screen.dart:653:36 - unnecessary_to_list_in_spreads
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\attendance\modify_attendance_screen.dart:929:17 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\attendance\modify_attendance_screen.dart:950:19 - deprecated_member_use
+warning - Unused import: 'package:sexta_app/widgets/branded_app_bar.dart' - lib\screens\attendance\take_attendance_screen.dart:4:8 - unused_import
+   info - Don't invoke 'print' in production code - lib\screens\attendance\take_attendance_screen.dart:79:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\attendance\take_attendance_screen.dart:86:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\attendance\take_attendance_screen.dart:87:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\attendance\take_attendance_screen.dart:90:7 - avoid_print
+   info - Don't use 'BuildContext's across async gaps - lib\screens\attendance\take_attendance_screen.dart:128:30 - use_build_context_synchronously
+   info - 'officer' is deprecated and shouldn't be used. Use oficial1 instead - lib\screens\attendance\take_attendance_screen.dart:222:61 - deprecated_member_use_from_same_package
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\attendance\take_attendance_screen.dart:351:23 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\attendance\take_attendance_screen.dart:398:25 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\attendance\take_attendance_screen.dart:722:12 - unnecessary_to_list_in_spreads
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\change_password_screen.dart:242:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\change_password_screen.dart:245:56 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\change_password_screen.dart:285:59 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\change_password_screen.dart:288:61 - deprecated_member_use
+warning - Unused import: 'package:sexta_app/widgets/app_drawer.dart' - lib\screens\auth\login_screen.dart:7:8 - unused_import
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:222:59 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:225:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\simple_login_screen.dart:123:59 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\simple_login_screen.dart:126:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\simple_login_screen.dart:179:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\simple_login_screen.dart:239:38 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\screens\dashboard\company_dashboard_screen.dart:59:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\screens\dashboard\company_dashboard_screen.dart:203:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\company_dashboard_screen.dart:314:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\company_dashboard_screen.dart:450:26 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\screens\dashboard\dashboard_screen.dart:78:7 - avoid_print
+   info - Unnecessary use of 'toList' in a spread - lib\screens\dashboard\dashboard_screen.dart:505:18 - unnecessary_to_list_in_spreads
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\dashboard_screen.dart:547:36 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\dashboard\dashboard_screen.dart:559:18 - unnecessary_to_list_in_spreads
+   info - 'officer' is deprecated and shouldn't be used. Use oficial1 instead - lib\screens\dashboard\dashboard_screen.dart:569:57 - deprecated_member_use_from_same_package
+   info - Don't invoke 'print' in production code - lib\screens\epp\epp_management_screen.dart:53:7 - avoid_print
+   info - Use interpolation to compose strings and values - lib\screens\epp\epp_management_screen.dart:159:37 - prefer_interpolation_to_compose_strings
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\epp\epp_management_screen.dart:259:44 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\epp\epp_management_screen.dart:566:17 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\epp\epp_management_screen.dart:616:17 - deprecated_member_use
+warning - Unused import: 'package:sexta_app/widgets/branded_app_bar.dart' - lib\screens\permissions\manage_permissions_screen.dart:3:8 - unused_import
+warning - The value of the local variable 'status' isn't used - lib\screens\permissions\manage_permissions_screen.dart:451:11 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\manage_permissions_screen.dart:564:26 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\manage_permissions_screen.dart:566:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\manage_permissions_screen.dart:754:53 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\permissions\manage_permissions_screen.dart:956:17 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\permissions\manage_permissions_screen.dart:957:17 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\permissions\manage_permissions_screen.dart:1028:25 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\permissions\manage_permissions_screen.dart:1029:25 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\request_permission_screen.dart:107:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\request_permission_screen.dart:109:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\permissions\request_permission_screen.dart:341:54 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\screens\profile\profile_screen.dart:70:7 - avoid_print
+warning - The declaration '_getRoleName' isn't referenced - lib\screens\profile\profile_screen.dart:167:10 - unused_element
+   info - 'officer' is deprecated and shouldn't be used. Use oficial1 instead - lib\screens\profile\profile_screen.dart:186:21 - deprecated_member_use_from_same_package
+   info - 'firefighter' is deprecated and shouldn't be used. Use bombero instead - lib\screens\profile\profile_screen.dart:188:21 - deprecated_member_use_from_same_package
+   info - Unnecessary use of 'toList' in a spread - lib\screens\profile\profile_screen.dart:438:18 - unnecessary_to_list_in_spreads
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\profile\profile_screen.dart:503:44 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\profile\profile_screen.dart:517:18 - unnecessary_to_list_in_spreads
+   info - Don't use 'BuildContext's across async gaps - lib\screens\settings\act_types_screen.dart:61:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\settings\act_types_screen.dart:74:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\settings\act_types_screen.dart:122:30 - use_build_context_synchronously
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\settings\act_types_screen.dart:217:37 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\settings\act_types_screen.dart:218:37 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\settings\act_types_screen.dart:242:37 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\settings\act_types_screen.dart:243:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\settings\act_types_screen.dart:327:58 - deprecated_member_use
+warning - Unused import: 'package:sexta_app/widgets/branded_app_bar.dart' - lib\screens\shifts\shift_registration_screen.dart:4:8 - unused_import
+   info - Don't use 'BuildContext's across async gaps - lib\screens\shifts\shift_registration_screen.dart:142:28 - use_build_context_synchronously
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\shifts\shift_registration_screen.dart:195:29 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\shifts\shift_registration_screen.dart:269:66 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\shifts\shift_registration_screen.dart:345:34 - unnecessary_to_list_in_spreads
+   info - Parameter 'key' could be a super parameter - lib\screens\treasury\payment_registration_tab.dart:16:9 - use_super_parameters
+warning - The declaration '_sendQuotaNotifications' isn't referenced - lib\screens\treasury\payment_registration_tab.dart:146:16 - unused_element
+   info - Don't invoke 'print' in production code - lib\screens\treasury\payment_registration_tab.dart:171:7 - avoid_print
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\treasury\payment_registration_tab.dart:197:23 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\treasury\payment_registration_tab.dart:227:23 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\screens\treasury\payment_registration_tab.dart:437:35 - unnecessary_underscores
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\payment_registration_tab.dart:449:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\payment_registration_tab.dart:465:48 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\screens\treasury\payment_registration_tab.dart:662:7 - avoid_print
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\treasury\payment_registration_tab.dart:753:17 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\treasury\reports_tab.dart:14:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\reports_tab.dart:134:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\reports_tab.dart:136:67 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\reports_tab.dart:363:40 - deprecated_member_use
+warning - Unused import: '../../models/user_model.dart' - lib\screens\treasury\treasury_management_screen.dart:4:8 - unused_import
+   info - Parameter 'key' could be a super parameter - lib\screens\treasury\treasury_management_screen.dart:16:9 - use_super_parameters
+   info - Unnecessary use of multiple underscores - lib\screens\treasury\treasury_management_screen.dart:336:41 - unnecessary_underscores
+   info - Parameter 'key' could be a super parameter - lib\screens\treasury\treasury_user_config_tab.dart:13:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\treasury\treasury_user_config_tab.dart:237:69 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\users\user_management_screen.dart:107:17 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\users\user_management_screen.dart:195:32 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\users\user_management_screen.dart:196:40 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\users\user_management_screen.dart:206:32 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\users\user_management_screen.dart:207:40 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\users\user_management_screen.dart:553:71 - deprecated_member_use
+warning - The declaration '_generateVictorNumber' isn't referenced - lib\screens\users\user_management_screen.dart:762:10 - unused_element
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\users\user_management_screen.dart:928:19 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\users\user_management_screen.dart:967:19 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\users\user_management_screen.dart:1065:19 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\users\user_management_screen.dart:1084:19 - deprecated_member_use
+warning - Unused import: 'package:intl/date_symbol_data_local.dart' - lib\services\attendance_service.dart:5:8 - unused_import
+warning - The declaration '_getTotalEventsCount' isn't referenced - lib\services\attendance_service.dart:401:15 - unused_element
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:32:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:39:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:41:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:44:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:52:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:55:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:57:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:64:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:67:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:69:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:138:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:19:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:20:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:21:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:22:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:38:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:39:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:42:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:45:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\email_service.dart:49:7 - avoid_print
+   info - Unnecessary use of 'toList' in a spread - lib\services\pdf_service.dart:189:18 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\services\shift_service.dart:231:24 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\services\shift_service.dart:236:18 - unnecessary_to_list_in_spreads
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:39:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:42:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:53:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:55:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:65:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\simple_auth_service.dart:107:5 - avoid_print
+   info - 'dart:html' is deprecated and shouldn't be used. Use package:web and dart:js_interop instead - lib\services\treasury_report_service.dart:7:1 - deprecated_member_use
+   info - Don't use web-only libraries outside Flutter web plugins - lib\services\treasury_report_service.dart:7:1 - avoid_web_libraries_in_flutter
+warning - Unused import: '../models/treasury_payment_model.dart' - lib\services\treasury_report_service.dart:10:8 - unused_import
+   info - Don't invoke 'print' in production code - lib\services\treasury_report_service.dart:265:7 - avoid_print
+warning - The value of the local variable 'anchor' isn't used - lib\services\treasury_report_service.dart:276:13 - unused_local_variable
+   info - Don't invoke 'print' in production code - lib\services\treasury_report_service.dart:422:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_report_service.dart:565:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_report_service.dart:761:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_report_service.dart:954:7 - avoid_print
+warning - The value of the local variable 'anchor' isn't used - lib\services\treasury_report_service.dart:1025:13 - unused_local_variable
+warning - Unused import: '../models/user_model.dart' - lib\services\treasury_service.dart:2:8 - unused_import
+warning - The declaration '_getUsersWithCache' isn't referenced - lib\services\treasury_service.dart:17:38 - unused_element
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:72:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:89:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:110:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:132:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:154:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:173:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:217:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:235:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:253:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:283:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:320:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:344:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:388:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\treasury_service.dart:407:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:20:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:37:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:55:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:71:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:86:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:101:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\user_service.dart:119:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\widgets\app_drawer.dart:30:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\widgets\app_drawer.dart:45:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\widgets\app_drawer.dart:46:5 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\widgets\app_drawer.dart:93:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\widgets\app_drawer.dart:307:52 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\widgets\report_filters.dart:16:9 - use_super_parameters
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\widgets\report_filters.dart:60:23 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\widgets\treasury_status_card.dart:10:9 - use_super_parameters
+  error - The name 'MyApp' isn't a class - test\widget_test.dart:16:35 - creation_with_non_type
+   info - Don't invoke 'print' in production code - test_password_hash.dart:7:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:17:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:18:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:19:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:20:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:22:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:23:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:24:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:26:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:28:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:35:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:36:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:37:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_password_hash.dart:38:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:6:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:16:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:17:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:18:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:35:7 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:38:7 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:42:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:43:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:44:3 - avoid_print
+   info - Don't invoke 'print' in production code - test_user_password.dart:45:3 - avoid_print
+
+flutter : 236 issues 
+found. (ran in 29.6s)
+En línea: 1 Carácter: 1
++ flutter analyze 2>&1 | 
+Out-File -FilePath 
+"analyze_errors.txt" 
+-Encod ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (236  
+   issues found. (ran in   
+  29.6s):String) [], Re    
+moteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 

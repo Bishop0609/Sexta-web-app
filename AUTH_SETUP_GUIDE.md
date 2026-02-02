@@ -263,7 +263,7 @@ Una vez que el login funcione correctamente:
 2. **Preparar deployment**
    - Ejecutar `build-deploy.ps1`
    - Subir a iHost.cl
-   - Probar en `https://sexta.tiendanatalia.cl`
+   - Probar en `https://sgi.sextacoquimbo.cl`
 
 3. **Comunicar a usuarios**
    - Informar RUT de cada bombero

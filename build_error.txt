@@ -1,0 +1,31 @@
+﻿  Generating the build script.
+  Compiling the build script.
+W /C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer_plugin-0.12.0/lib/src/utilities/change_builder/change_builder_dart.dart:2133:32: Error: The argument type 'Element' can't be assigned to the parameter type 'Element2'.
+   - 'Element' is from 'package:analyzer/dart/element/element.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element.dart').
+   - 'Element2' is from 'package:analyzer/dart/element/element2.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element2.dart').
+              .publiclyExporting(element, resultCache: resultCache) ??
+                                 ^
+  /C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer_plugin-0.12.0/lib/src/utilities/change_builder/change_builder_dart.dart:2133:54: Error: The argument type 'Map<Element, LibraryElement?>?' can't be assigned to the parameter type 'Map<Element2, LibraryElement2?>?'.
+   - 'Map' is from 'dart:core'.
+   - 'Element' is from 'package:analyzer/dart/element/element.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element.dart').
+   - 'LibraryElement' is from 'package:analyzer/dart/element/element.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element.dart').
+   - 'Element2' is from 'package:analyzer/dart/element/element2.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element2.dart').
+   - 'LibraryElement2' is from 'package:analyzer/dart/element/element2.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element2.dart').
+              .publiclyExporting(element, resultCache: resultCache) ??
+                                                       ^
+  /C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer_plugin-0.12.0/lib/src/utilities/change_builder/change_builder_dart.dart:2137:40: Error: The getter 'source' isn't defined for the type 'Object'.
+   - 'Object' is from 'dart:core'.
+  Try correcting the name to the name of an existing getter, or defining a getter or field named 'source'.
+      var uriToImport = libraryToImport?.source.uri;
+                                         ^^^^^^
+  /C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer_plugin-0.12.0/lib/src/utilities/change_builder/change_builder_dart.dart:2150:58: Error: The argument type 'Object?' can't be assigned to the parameter type 'LibraryElement?'.
+   - 'Object' is from 'dart:core'.
+   - 'LibraryElement' is from 'package:analyzer/dart/element/element.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/dart/element/element.dart').
+        _removeUnnecessaryPendingElementImports(newImport, libraryToImport);
+                                                           ^
+  /C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer_plugin-0.12.0/lib/src/utilities/change_builder/change_builder_dart.dart:2182:14: Error: The method 'publiclyExporting2' isn't defined for the type 'TopLevelDeclarations'.
+   - 'TopLevelDeclarations' is from 'package:analyzer/src/services/top_level_declarations.dart' ('/C:/Users/Surface/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-7.6.0/lib/src/services/top_level_declarations.dart').
+  Try correcting the name to the name of an existing method, or defining a method named 'publiclyExporting2'.
+              .publiclyExporting2(element, resultCache: resultCache) ??
+               ^^^^^^^^^^^^^^^^^^
+E Failed to compile build script. Check builder definitions and generated script .dart_tool/build/entrypoint/build.dart.

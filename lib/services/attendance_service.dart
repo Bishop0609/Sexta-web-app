@@ -2,6 +2,7 @@ import 'package:sexta_app/models/user_model.dart';
 import 'package:sexta_app/models/attendance_record_model.dart';
 import 'package:sexta_app/services/supabase_service.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 /// Servicio para gestión de asistencia con lógica de cross-check automático
 class AttendanceService {
@@ -146,7 +147,8 @@ class AttendanceService {
     return true;
   }
 
-  /// Calcula estadísticas individuales (Efectiva vs Abono)
+  /// Calcula estadísticas individuales (Efectiva vs Abono) - DEPRECATED
+  /// Use calculateCitationAndEmergencyStats instead
   Future<Map<String, dynamic>> calculateIndividualStats(String userId) async {
     final supabaseClient = _supabase.client;
 
@@ -189,6 +191,181 @@ class AttendanceService {
     };
   }
 
+  /// NEW: Calcula estadísticas de asistencia a citaciones y emergencias
+  /// del mes actual para un usuario específico
+  Future<Map<String, dynamic>> calculateCitationAndEmergencyStats(String userId) async {
+    final supabaseClient = _supabase.client;
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+
+    // Obtener todos los registros del mes actual donde el usuario estuvo presente
+    final response = await supabaseClient
+        .from('attendance_records')
+        .select('''
+          status,
+          event:attendance_events!inner(
+            event_date,
+            act_type:act_types!inner(name)
+          )
+        ''')
+        .eq('user_id', userId)
+        .eq('status', 'present');
+
+    final records = response as List;
+    
+    int citationCount = 0;
+    int emergencyCount = 0;
+    int totalCitationEvents = 0;
+    int totalEmergencyEvents = 0;
+
+    // Contar asistencias por tipo (filtrar por mes en el código)
+    for (final record in records) {
+      final eventDate = DateTime.parse(record['event']['event_date'] as String);
+      
+      // Solo contar si está en el mes actual
+      if (eventDate.month == now.month && eventDate.year == now.year) {
+        final actTypeName = record['event']['act_type']['name'] as String;
+        
+        if (actTypeName.toLowerCase().contains('citac') || 
+            actTypeName.toLowerCase().contains('citación')) {
+          citationCount++;
+        } else if (actTypeName.toLowerCase() == 'emergencia') {
+          emergencyCount++;
+        }
+      }
+    }
+
+    // Obtener total de eventos de citaciones y emergencias del mes
+    final allEvents = await supabaseClient
+        .from('attendance_events')
+        .select('''
+          act_type:act_types!inner(name)
+        ''')
+        .gte('event_date', firstDayOfMonth.toIso8601String().split('T')[0])
+        .lte('event_date', lastDayOfMonth.toIso8601String().split('T')[0]);
+
+    for (final event in allEvents as List) {
+      final actTypeName = event['act_type']['name'] as String;
+      
+      if (actTypeName.toLowerCase().contains('citac') || 
+          actTypeName.toLowerCase().contains('citación')) {
+        totalCitationEvents++;
+      } else if (actTypeName.toLowerCase() == 'emergencia') {
+        totalEmergencyEvents++;
+      }
+    }
+
+    final citationPct = totalCitationEvents > 0 
+        ? (citationCount / totalCitationEvents) * 100 
+        : 0.0;
+    final emergencyPct = totalEmergencyEvents > 0 
+        ? (emergencyCount / totalEmergencyEvents) * 100 
+        : 0.0;
+
+    return {
+      'citation_count': citationCount,
+      'emergency_count': emergencyCount,
+      'total_citation_events': totalCitationEvents,
+      'total_emergency_events': totalEmergencyEvents,
+      'citation_pct': citationPct,
+      'emergency_pct': emergencyPct,
+      'month_name': DateFormat('MMMM', 'es_ES').format(now),
+      'year': now.year,
+    };
+  }
+
+  /// NEW: Calcula estadísticas mensuales de citaciones y emergencias
+  /// para los últimos 6 meses de un usuario específico
+  Future<List<Map<String, dynamic>>> calculateMonthlyAttendanceByType(String userId) async {
+    final supabaseClient = _supabase.client;
+    final now = DateTime.now();
+    final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
+
+    // Obtener todos los registros (sin filtro de fecha en query)
+    final response = await supabaseClient
+        .from('attendance_records')
+        .select('''
+          status,
+          event:attendance_events!inner(
+            event_date,
+            act_type:act_types!inner(name)
+          )
+        ''')
+        .eq('user_id', userId)
+        .eq('status', 'present');
+
+    final records = response as List;
+    
+    // Agrupar por mes (filtrar fechas en código)
+    final Map<String, Map<String, int>> monthlyData = {};
+    
+    for (final record in records) {
+      final eventDate = DateTime.parse(record['event']['event_date'] as String);
+      
+      // Solo procesar si está en los últimos 6 meses
+      if (eventDate.isAfter(sixMonthsAgo.subtract(const Duration(days: 1)))) {
+        final monthKey = '${eventDate.year}-${eventDate.month.toString().padLeft(2, '0')}';
+        final actTypeName = record['event']['act_type']['name'] as String;
+        
+        if (!monthlyData.containsKey(monthKey)) {
+          monthlyData[monthKey] = {
+            'citation': 0,
+            'emergency': 0,
+            'month_num': eventDate.month,
+            'year': eventDate.year,
+          };
+        }
+        
+        if (actTypeName.toLowerCase().contains('citac') || 
+            actTypeName.toLowerCase().contains('citación')) {
+          monthlyData[monthKey]!['citation'] = (monthlyData[monthKey]!['citation'] ?? 0) + 1;
+        } else if (actTypeName.toLowerCase() == 'emergencia') {
+          monthlyData[monthKey]!['emergency'] = (monthlyData[monthKey]!['emergency'] ?? 0) + 1;
+        }
+      }
+    }
+
+    // Convertir a lista y ordenar por fecha
+    final result = monthlyData.entries.map((entry) {
+      return {
+        'month_key': entry.key,
+        'month_num': entry.value['month_num'],
+        'year': entry.value['year'],
+        'citation_count': entry.value['citation'],
+        'emergency_count': entry.value['emergency'],
+      };
+    }).toList();
+
+    result.sort((a, b) {
+      final dateA = DateTime(a['year'] as int, a['month_num'] as int);
+      final dateB = DateTime(b['year'] as int, b['month_num'] as int);
+      return dateA.compareTo(dateB);
+    });
+
+    // Asegurar que siempre devolvemos 6 meses (rellenar con ceros si es necesario)
+    final completeResult = <Map<String, dynamic>>[];
+    for (int i = 5; i >= 0; i--) {
+      final targetDate = DateTime(now.year, now.month - i, 1);
+      final monthKey = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}';
+      
+      final existing = result.firstWhere(
+        (r) => r['month_key'] == monthKey,
+        orElse: () => {
+          'month_key': monthKey,
+          'month_num': targetDate.month,
+          'year': targetDate.year,
+          'citation_count': 0,
+          'emergency_count': 0,
+        },
+      );
+      
+      completeResult.add(existing);
+    }
+
+    return completeResult;
+  }
+
   /// Calcula estadísticas de la compañía por mes (últimos 6 meses) - OPTIMIZADO con RPC
   Future<List<Map<String, dynamic>>> calculateCompanyMonthlyStats() async {
     final supabaseClient = _supabase.client;
@@ -219,35 +396,6 @@ class AttendanceService {
     // Retornar lista vacía temporalmente para mejorar performance
     // En producción, esto debería ser un RPC que calcule en el servidor
     return [];
-    
-    /* CÓDIGO ORIGINAL (MUY LENTO):
-    final users = await _supabase.getAllUsers();
-    final alerts = <Map<String, dynamic>>[];
-
-    for (final user in users) {
-      final stats = await calculateIndividualStats(user.id);
-      final totalEvents = await _getTotalEventsCount();
-      
-      if (totalEvents == 0) continue;
-
-      final attendancePct = (stats['total'] as int) / totalEvents;
-
-      if (attendancePct < threshold) {
-        alerts.add({
-          'user_id': user.id,
-          'full_name': user.fullName,
-          'rank': user.rank,
-          'attendance_pct': attendancePct * 100,
-          'severity': attendancePct < 0.50 ? 'critical' : 'warning',
-        });
-      }
-    }
-
-    alerts.sort((a, b) => 
-        (a['attendance_pct'] as double).compareTo(b['attendance_pct'] as double));
-
-    return alerts;
-    */
   }
 
   Future<int> _getTotalEventsCount() async {

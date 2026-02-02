@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,6 +23,9 @@ import 'package:sexta_app/screens/shifts/shift_attendance_screen.dart';
 import 'package:sexta_app/screens/users/user_management_screen.dart';
 import 'package:sexta_app/screens/settings/act_types_screen.dart';
 import 'package:sexta_app/screens/activities/manage_activities_screen.dart';
+import 'package:sexta_app/screens/epp/epp_management_screen.dart';
+import 'package:sexta_app/screens/dashboard/company_dashboard_screen.dart';
+import 'package:sexta_app/screens/treasury/treasury_management_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +52,16 @@ class SextaApp extends StatelessWidget {
       theme: AppTheme.theme,
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
+      // Configuración de idioma español
+      locale: const Locale('es', 'ES'),
+      supportedLocales: const [
+        Locale('es', 'ES'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
     );
   }
 }
@@ -117,6 +131,18 @@ final _router = GoRouter(
     GoRoute(
       path: '/manage-activities',
       builder: (context, state) => const ManageActivitiesScreen(),
+    ),
+    GoRoute(
+      path: '/epp-management',
+      builder: (context, state) => const EPPManagementScreen(),
+    ),
+    GoRoute(
+      path: '/company-dashboard',
+      builder: (context, state) => const CompanyDashboardScreen(),
+    ),
+    GoRoute(
+      path: '/treasury',
+      builder: (context, state) => const TreasuryManagementScreen(),
     ),
   ],
 );

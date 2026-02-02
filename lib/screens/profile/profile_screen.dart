@@ -6,8 +6,11 @@ import 'package:sexta_app/widgets/branded_app_bar.dart';
 import 'package:sexta_app/services/attendance_service.dart';
 import 'package:sexta_app/services/supabase_service.dart';
 import 'package:sexta_app/services/auth_service.dart';
+import 'package:sexta_app/services/epp_service.dart';
 import 'package:sexta_app/models/user_model.dart';
+import 'package:sexta_app/models/epp_assignment_model.dart';
 import 'package:intl/intl.dart';
+import 'package:sexta_app/widgets/treasury_status_card.dart';
 
 /// Profile screen showing user's personal information, statistics, and history
 class ProfileScreen extends StatefulWidget {
@@ -21,12 +24,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _supabase = SupabaseService();
   final _authService = AuthService();
   final _attendanceService = AttendanceService();
+  final _eppService = EPPService();
 
   bool _isLoading = true;
   UserModel? _user;
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _attendanceHistory = [];
   List<Map<String, dynamic>> _permissions = [];
+  List<EPPAssignmentModel> _eppAssignments = [];
 
   @override
   void initState() {
@@ -50,6 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _attendanceService.calculateIndividualStats(userId),
         _attendanceService.getUserAttendanceHistory(userId, 20),
         _supabase.getPermissionsByUser(userId),
+        _eppService.getActiveEPPByUser(userId),
       ]);
 
       setState(() {
@@ -57,6 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _stats = results[1] as Map<String, dynamic>;
         _attendanceHistory = results[2] as List<Map<String, dynamic>>;
         _permissions = results[3] as List<Map<String, dynamic>>;
+        _eppAssignments = results[4] as List<EPPAssignmentModel>;
         _isLoading = false;
       });
     } catch (e) {
@@ -83,6 +90,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildPersonalDataCard(),
+                  const SizedBox(height: 16),
+                  // Widget de estado de tesorería
+                  if (_user != null)
+                    TreasuryStatusCard(user: _user!),
+                  if (_user != null)
+                    const SizedBox(height: 16),
+                  _buildEPPCard(),
                   const SizedBox(height: 16),
                   _buildStatsCard(),
                   const SizedBox(height: 16),
@@ -123,9 +137,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildDataRow('Cargo', _user!.rank),
             if (_user!.email != null)
               _buildDataRow('Email', _user!.email!),
-            _buildDataRow('Estado Civil', _user!.maritalStatus == MaritalStatus.married ? 'Casado/a' : 'Soltero/a'),
-            _buildDataRow('Género', _user!.gender == Gender.male ? 'Masculino' : 'Femenino'),
-            _buildDataRow('Rol', _getRoleName(_user!.role)),
           ],
         ),
       ),
@@ -157,10 +168,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
     switch (role) {
       case UserRole.admin:
         return 'Administrador';
-      case UserRole.officer:
-        return 'Oficial';
-      case UserRole.firefighter:
+      case UserRole.oficial1:
+        return 'Oficial 1 - Capitán y Jefe';
+      case UserRole.oficial2:
+        return 'Oficial 2 - Gestión Actividades';
+      case UserRole.oficial3:
+        return 'Oficial 3 - Ayudante';
+      case UserRole.oficial4:
+        return 'Oficial 4 - Teniente a Cargo';
+      case UserRole.oficial5:
+        return 'Oficial 5 - Administración';
+      case UserRole.oficial6:
+        return 'Oficial 6 - Tesorero';
+      case UserRole.bombero:
         return 'Bombero';
+      // Deprecated roles (backward compatibility)
+      case UserRole.officer:
+        return 'Oficial (Migrar)';
+      case UserRole.firefighter:
+        return 'Bombero (Migrar)';
+    }
+  }
+
+  Widget _buildEPPCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.safety_divider, color: AppTheme.navyBlue),
+                const SizedBox(width: 8),
+                Text(
+                  'EPP a Cargo',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            if (_eppAssignments.isEmpty)
+              const Text('No tienes EPP asignado actualmente')
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 40,
+                  dataRowMinHeight: 32,
+                  dataRowMaxHeight: 40,
+                  columnSpacing: 16,
+                  horizontalMargin: 0,
+                  columns: const [
+                    DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Código', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Marca/Modelo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Fecha Recepción', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  rows: _eppAssignments.map((epp) {
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getEPPIcon(epp.eppType),
+                                color: AppTheme.navyBlue,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(epp.eppType.displayName),
+                            ],
+                          ),
+                        ),
+                        DataCell(Text(epp.internalCode)),
+                        DataCell(Text('${epp.brand ?? ''} ${epp.model ?? ''}'.trim().isEmpty 
+                            ? '-' 
+                            : '${epp.brand ?? ''} ${epp.model ?? ''}'.trim())),
+                        DataCell(Text(epp.condition.displayName)),
+                        DataCell(Text(DateFormat('dd/MM/yyyy').format(epp.receptionDate))),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getEPPIcon(EPPType type) {
+    switch (type) {
+      case EPPType.casco:
+        return Icons.safety_divider;
+      case EPPType.uniformeEstructural:
+      case EPPType.uniformeMultirrol:
+      case EPPType.uniformeParada:
+        return Icons.checkroom;
+      case EPPType.guantesEstructurales:
+      case EPPType.guantesRescate:
+        return Icons.back_hand;
+      case EPPType.botas:
+        return Icons.skateboarding;
+      case EPPType.linterna:
+        return Icons.flashlight_on;
+      default:
+        return Icons.inventory_2;
     }
   }
 

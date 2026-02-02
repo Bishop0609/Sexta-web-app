@@ -67,11 +67,18 @@ class _SimpleLoginScreenState extends State<SimpleLoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Logo/Icono
-                      const Icon(
-                        Icons.local_fire_department,
-                        size: 80,
-                        color: AppTheme.institutionalRed,
+                      // Logo SGI
+                      Image.asset(
+                        'assets/images/logo_sgi.png',
+                        height: 120,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.local_fire_department,
+                            size: 80,
+                            color: AppTheme.institutionalRed,
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       
@@ -85,13 +92,6 @@ class _SimpleLoginScreenState extends State<SimpleLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Sistema de Gestión Integral',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
                       const SizedBox(height: 40),
                       
                       // RUT

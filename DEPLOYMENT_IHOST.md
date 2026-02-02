@@ -1,5 +1,5 @@
 # 🚀 Guía de Deployment - iHost.cl
-## Sexta Compañía ERP → sexta.tiendanatalia.cl
+## Sexta Compañía ERP → sgi.sextacoquimbo.cl
 
 Esta guía está personalizada para tu configuración específica.
 
@@ -8,9 +8,9 @@ Esta guía está personalizada para tu configuración específica.
 ## 📋 Tu Configuración
 
 - **Proveedor:** iHost.cl
-- **Subdominio temporal:** `sexta.tiendanatalia.cl`
-- **Carpeta en servidor:** `/public_html/sexta/`
-- **URL final:** `https://sexta.tiendanatalia.cl`
+- **Dominio definitivo:** `sgi.sextacoquimbo.cl`
+- **Carpeta en servidor:** `/public_html/sgi/`
+- **URL final:** `https://sgi.sextacoquimbo.cl`
 
 ---
 
@@ -20,7 +20,7 @@ Esta guía está personalizada para tu configuración específica.
 
 1. Ir a: https://ihost.cl/clientes/clientarea.php
 2. Login con tus credenciales
-3. Buscar tu dominio `tiendanatalia.cl`
+3. Buscar tu dominio `sextacoquimbo.cl`
 4. Click en **"Iniciar sesión en cPanel"**
 
 ### Crear el Subdominio
@@ -29,15 +29,15 @@ Esta guía está personalizada para tu configuración específica.
 2. Click en **"Subdominios"**
 3. Llenar el formulario:
    ```
-   Subdominio: sexta
-   Dominio: tiendanatalia.cl
-   Raíz del documento: public_html/sexta
+   Subdominio: sgi
+   Dominio: sextacoquimbo.cl
+   Raíz del documento: public_html/sgi
    ```
 4. Click **"Crear"**
 
 **Resultado esperado:**
-✅ Subdominio creado: `sexta.tiendanatalia.cl`  
-✅ Carpeta creada: `/public_html/sexta/`
+✅ Subdominio creado: `sgi.sextacoquimbo.cl`  
+✅ Carpeta creada: `/public_html/sgi/`
 
 ---
 
@@ -93,7 +93,7 @@ cd c:\Sexta_app
 
 2. **Navegar a la carpeta del subdominio:**
    - Click en `public_html`
-   - Click en `sexta` (la carpeta que se creó automáticamente)
+   - Click en `sgi` (la carpeta que se creó automáticamente)
 
 3. **Subir el archivo ZIP:**
    - Click en botón **"Cargar"** (arriba)
@@ -103,10 +103,10 @@ cd c:\Sexta_app
    - Click **"Volver a..."** para regresar al File Manager
 
 4. **Extraer el archivo:**
-   - Ubicar el archivo ZIP en `/public_html/sexta/`
+   - Ubicar el archivo ZIP en `/public_html/sgi/`
    - Click derecho sobre el ZIP
    - Seleccionar **"Extraer"** o **"Extract"**
-   - Confirmar la ruta: `/public_html/sexta/`
+   - Confirmar la ruta: `/public_html/sgi/`
    - Click **"Extract File(s)"**
    - Esperar a que termine
 
@@ -115,7 +115,7 @@ cd c:\Sexta_app
    - Click en **"Eliminar"** o **"Delete"**
 
 6. **Verificar archivos:**
-   - Deberías ver en `/public_html/sexta/`:
+   - Deberías ver en `/public_html/sgi/`:
      ```
      .htaccess
      index.html
@@ -140,10 +140,10 @@ iHost.cl incluye SSL gratuito con Let's Encrypt.
 2. **Click en "SSL/TLS Status"**
 
 3. **Buscar tu subdominio:**
-   - Buscar `sexta.tiendanatalia.cl` en la lista
+   - Buscar `sgi.sextacoquimbo.cl` en la lista
 
 4. **Si no tiene SSL activo:**
-   - Click en checkbox junto a `sexta.tiendanatalia.cl`
+   - Click en checkbox junto a `sgi.sextacoquimbo.cl`
    - Click en **"Run AutoSSL"**
    - Esperar 1-3 minutos
 
@@ -154,7 +154,7 @@ iHost.cl incluye SSL gratuito con Let's Encrypt.
 ### Forzar HTTPS (Opcional pero recomendado)
 
 1. Ir al File Manager
-2. Abrir archivo `/public_html/sexta/.htaccess`
+2. Abrir archivo `/public_html/sgi/.htaccess`
 3. Descomentar las últimas líneas (quitar los `#`):
 
 ```apache
@@ -187,12 +187,12 @@ Tu app necesita que Supabase permita conexiones desde el nuevo dominio.
 
 5. **En "Site URL"**, cambiar a:
    ```
-   https://sexta.tiendanatalia.cl
+   https://sgi.sextacoquimbo.cl
    ```
 
 6. **En "Redirect URLs"**, agregar:
    ```
-   https://sexta.tiendanatalia.cl/**
+   https://sgi.sextacoquimbo.cl/**
    ```
 
 7. **Click "Save"**
@@ -204,7 +204,7 @@ Tu app necesita que Supabase permita conexiones desde el nuevo dominio.
 ### Checklist de Pruebas
 
 1. **Verificar SSL:**
-   - [ ] Visitar: `https://sexta.tiendanatalia.cl`
+   - [ ] Visitar: `https://sgi.sextacoquimbo.cl`
    - [ ] Debe aparecer 🔒 candado verde
    - [ ] No debe haber advertencias de seguridad
 
@@ -214,9 +214,9 @@ Tu app necesita que Supabase permita conexiones desde el nuevo dominio.
    - [ ] No debe haber pantalla en blanco
 
 3. **Verificar rutas de Flutter:**
-   - [ ] `https://sexta.tiendanatalia.cl/request-permission`
-   - [ ] `https://sexta.tiendanatalia.cl/act-types`
-   - [ ] `https://sexta.tiendanatalia.cl/shift-registration`
+   - [ ] `https://sgi.sextacoquimbo.cl/request-permission`
+   - [ ] `https://sgi.sextacoquimbo.cl/act-types`
+   - [ ] `https://sgi.sextacoquimbo.cl/shift-registration`
    - [ ] Todas deben cargar sin error 404
 
 4. **Verificar consola del navegador:**
@@ -236,7 +236,7 @@ Tu app necesita que Supabase permita conexiones desde el nuevo dominio.
 
 Puedes compartir la URL con los oficiales:
 ```
-https://sexta.tiendanatalia.cl
+https://sgi.sextacoquimbo.cl
 ```
 
 ---
@@ -284,7 +284,7 @@ https://sexta.tiendanatalia.cl
 **Posible causa:** Supabase no configurado correctamente
 
 **Solución:**
-1. Verificar que agregaste `https://sexta.tiendanatalia.cl` en Supabase
+1. Verificar que agregaste `https://sgi.sextacoquimbo.cl` en Supabase
 2. Incluir el `/**` al final para todas las rutas
 3. Esperar 1-2 minutos para propagación
 4. Hacer hard refresh del navegador (Ctrl + Shift + R)
@@ -305,10 +305,10 @@ Cuando hagas cambios en el código y quieras actualizar:
 
 2. **Backup (opcional pero recomendado):**
    - En cPanel File Manager
-   - Seleccionar toda la carpeta `/public_html/sexta/`
+   - Seleccionar toda la carpeta `/public_html/sgi/`
    - Click "Compress" → Crear ZIP
    - Descargar como backup
-   - Guardar con nombre: `backup-sexta-YYYY-MM-DD.zip`
+   - Guardar con nombre: `backup-sgi-YYYY-MM-DD.zip`
 
 3. **Upload nuevo build:**
    - Subir nuevo ZIP
@@ -349,9 +349,9 @@ Si necesitas ayuda técnica específica de iHost:
 - [ ] Mejoras de UX según feedback
 
 ### Largo Plazo (1-2 meses)
-- [ ] Registrar dominio definitivo (ej: `sextacompania.cl`)
+- [x] Registrar dominio definitivo (`sextacoquimbo.cl`) ✅
+- [x] Migrar app a dominio oficial (`sgi.sextacoquimbo.cl`) ✅
 - [ ] Desarrollar página web institucional
-- [ ] Migrar app a dominio oficial (`app.sextacompania.cl`)
 - [ ] Configurar backups automáticos
 - [ ] Habilitar seguridad en producción (RLS)
 

@@ -17,12 +17,17 @@ class AppConstants {
     defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhaXp4dWpweHl1dHBqY3dvcnRpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzY0Njc5MCwiZXhwIjoyMDgzMjIyNzkwfQ.kpR9aMyIGNz8AbPX2A9iR47s0-MVgPGSYeetm9ZOPSY',
   );
   
-  // Configuración de Resend (placeholder)
+  // Configuración de Resend
+  // TODO: Reemplaza 'TU_API_KEY_AQUI' con tu API Key real de Resend
+  // Ejemplo: 're_abc123def456ghi789jkl012mno345pqr678'
   static const String resendApiKey = String.fromEnvironment(
     'RESEND_API_KEY',
-    defaultValue: 're_hg4Arbih_8RmYpopH5oXjiEKF6KMgqaPa',
+    defaultValue: 're_hgBXdLJx_DwFmAgMHNzNMiW96twfiGoqT', // ← Pega tu API Key aquí
   );
-  static const String resendFromEmail = 'notificaciones@sexta.cl';
+  
+  // Para testing: usa 'onboarding@resend.dev'
+  // Para producción: usa 'notificaciones@sextacoquimbo.cl' (requiere verificar dominio)
+  static const String resendFromEmail = 'notificaciones@sextacoquimbo.cl';
   
   // Configuración de guardia
   static const int maxMalesPerShift = 6;
@@ -45,4 +50,6 @@ class AppConstants {
   static const String shiftConfigsTable = 'shift_configurations';
   static const String shiftRegistrationsTable = 'shift_registrations';
   static const String shiftAttendanceTable = 'shift_attendance';
+  static const String eppAssignmentsTable = 'epp_assignments';
+  static const String eppReturnsTable = 'epp_returns';
 }

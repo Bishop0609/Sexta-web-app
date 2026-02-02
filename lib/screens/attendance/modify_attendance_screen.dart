@@ -13,12 +13,14 @@ import 'package:intl/intl.dart';
 /// Configuración de categorías para agrupamiento (replicado de take_attendance_screen.dart)
 const Map<String, Map<String, dynamic>> attendanceCategories = {
   'OFICIALES DE COMPAÑÍA': {
-    'patterns': ['Director', 'Secretari', 'Tesorer', 'Capitán', 'Teniente', 'Ayudante', 'Inspector M.'],
+    'patterns': ['Director', 'Secretari', 'Pro-Secretari', 'Tesorer', 'Pro-Tesorer', 'Capitán', 'Teniente', 'Ayudante', 'Inspector M.'],
     'orderType': 'hierarchical',
     'hierarchy': {
       'Director': 1,
       'Secretario': 2, 'Secretaria': 2,
+      'Pro-Secretario': 2.5, 'Pro-Secretaria': 2.5, 'Pro-Secretario(a)': 2.5,
       'Tesorero': 3, 'Tesorera': 3,
+      'Pro-Tesorero': 3.5, 'Pro-Tesorera': 3.5, 'Pro-Tesorero(a)': 3.5,
       'Capitán': 4,
       'Teniente 1°': 5, 'Teniente 2°': 6, 'Teniente 3°': 7,
       'Ayudante 1°': 8, 'Ayudante 2°': 9,

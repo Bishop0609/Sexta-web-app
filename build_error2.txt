@@ -1,0 +1,53 @@
+﻿  0s compiling builders/jit
+  1s compiling builders/jit
+  2s compiling builders/jit
+  3s compiling builders/jit
+  4s compiling builders/jit
+  5s compiling builders/jit
+  6s compiling builders/jit
+  7s compiling builders/jit
+  8s compiling builders/jit
+  10s compiling builders/jit
+  11s compiling builders/jit
+  12s compiling builders/jit
+  13s compiling builders/jit
+  14s compiling builders/jit
+  15s compiling builders/jit
+  17s compiling builders/jit
+Running build hooks...Running build hooks...  0s riverpod_generator on 59 inputs; lib/core/constants/app_constants.dart
+  15s riverpod_generator on 59 inputs: 1 no-op; spent 15s┬ásdk; lib/core/permissions/role_permissions.dart
+  18s riverpod_generator on 59 inputs: 6 no-op; spent 15s┬ásdk, 2s┬áanalyzing; lib/models/activity_model.dart
+E riverpod_generator on lib/screens/activities/manage_activities_screen.dart:
+  424:5: A try block must be followed by an 'on', 'catch', or 'finally' clause.
+  498:7: Expected a class member.
+  498:13: Expected an identifier.
+  And 1 more.
+  19s riverpod_generator on 59 inputs: 43 no-op; spent 15s┬ásdk, 3s┬áanalyzing; lib/services/attendance_service.dart
+  19s riverpod_generator on 59 inputs: 59 no-op; spent 15s┬ásdk, 3s┬áanalyzing
+  0s freezed on 59 inputs; lib/core/constants/app_constants.dart
+  1s freezed on 59 inputs: 3 output, 11 no-op; lib/models/shift_config_model.dart
+E freezed on lib/screens/activities/manage_activities_screen.dart:
+  424:5: A try block must be followed by an 'on', 'catch', or 'finally' clause.
+  498:7: Expected a class member.
+  498:13: Expected an identifier.
+  And 1 more.
+  1s freezed on 59 inputs: 5 output, 54 no-op
+  0s json_serializable on 118 inputs; lib/core/constants/app_constants.dart
+  36s json_serializable on 118 inputs: 2 skipped, 3 no-op; spent 29s┬áanalyzing, 5s┬áresolving, 2s┬áreading; lib/core/theme/app_theme.freezed.dart
+  80s json_serializable on 118 inputs: 4 skipped, 5 no-op; spent 62s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 2s┬ábuilding; lib/main.freezed.dart
+  81s json_serializable on 118 inputs: 6 skipped, 1 output, 8 no-op; spent 63s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 2s┬ábuilding; lib/models/attendance_event_model.freezed.dart
+  82s json_serializable on 118 inputs: 12 skipped, 5 output, 16 no-op; spent 64s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/models/statistics_model.freezed.dart
+E json_serializable on lib/screens/activities/manage_activities_screen.dart:
+  424:5: A try block must be followed by an 'on', 'catch', or 'finally' clause.
+  498:7: Expected a class member.
+  498:13: Expected an identifier.
+  And 1 more.
+  83s json_serializable on 118 inputs: 16 skipped, 5 output, 22 no-op; spent 65s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/screens/attendance/modify_attendance_screen.freezed.dart
+  84s json_serializable on 118 inputs: 22 skipped, 5 output, 28 no-op; spent 66s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/screens/dashboard/dashboard_screen.freezed.dart
+  85s json_serializable on 118 inputs: 27 skipped, 5 output, 33 no-op; spent 67s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/screens/profile/profile_screen.freezed.dart
+  87s json_serializable on 118 inputs: 37 skipped, 5 output, 43 no-op; spent 69s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/screens/users/user_management_screen.freezed.dart
+  88s json_serializable on 118 inputs: 47 skipped, 5 output, 53 no-op; spent 70s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding; lib/services/treasury_service.freezed.dart
+  88s json_serializable on 118 inputs: 54 skipped, 5 output, 59 no-op; spent 70s┬áanalyzing, 11s┬áresolving, 4s┬áreading, 3s┬ábuilding
+  0s source_gen:combining_builder on 118 inputs; lib/core/constants/app_constants.dart
+  1s source_gen:combining_builder on 118 inputs: 54 skipped, 5 output, 59 no-op
+  Failed to build with build_runner/jit in 133s; wrote 15 outputs.

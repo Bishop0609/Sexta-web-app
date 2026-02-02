@@ -643,15 +643,23 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   String _selectedRank = 'Bombero(a)'; // Cambiado a cargo que existe en nueva lista
   Gender _selectedGender = Gender.male;
   MaritalStatus _selectedMaritalStatus = MaritalStatus.single;
-  UserRole _selectedRole = UserRole.firefighter; // Nuevo: rol del usuario
+  UserRole _selectedRole = UserRole.bombero; // Default role
   bool _isSaving = false;
+  
+  // Variables de tesorería
+  bool _isStudent = false;
+  DateTime? _studentStartDate;
+  DateTime? _studentEndDate;
+  DateTime? _paymentStartDate;
 
   // Cargos predefinidos por categoría
   final Map<String, List<String>> _cargoCategories = {
     'Oficiales de Compañía': [
       'Director',
       'Secretario',
+      'Pro-Secretario',
       'Tesorero',
+      'Pro-Tesorero',
       'Capitán',
       'Teniente 1°',
       'Teniente 2°',
@@ -819,17 +827,34 @@ class _UserFormDialogState extends State<_UserFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.user == null ? 'Crear Usuario' : 'Editar Usuario'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: SizedBox(
-            width: 500,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 650,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Title
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                widget.user == null ? 'Crear Usuario' : 'Editar Usuario',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            const Divider(height: 1),
+            // Content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 // Helper para mostrar texto de enums
                 // RUT
                 TextFormField(
@@ -952,27 +977,77 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                         children: [
                           Icon(Icons.admin_panel_settings, size: 20, color: Colors.red),
                           SizedBox(width: 8),
-                          Text('Administrador (acceso completo)'),
+                          Text('Administrador'),
                         ],
                       ),
                     ),
                     DropdownMenuItem<UserRole>(
-                      value: UserRole.officer,
+                      value: UserRole.oficial1,
                       child: Row(
                         children: [
-                          Icon(Icons.shield, size: 20, color: Colors.blue),
+                          Icon(Icons.military_tech, size: 20, color: Colors.blue),
                           SizedBox(width: 8),
-                          Text('Oficial (gestión de permisos y asistencia)'),
+                          Text('Oficial 1: Capitan y Tte 1'),
                         ],
                       ),
                     ),
                     DropdownMenuItem<UserRole>(
-                      value: UserRole.firefighter,
+                      value: UserRole.oficial2,
+                      child: Row(
+                        children: [
+                          Icon(Icons.event, size: 20, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('Oficial 2: Solo gestion de actividades'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem<UserRole>(
+                      value: UserRole.oficial3,
+                      child: Row(
+                        children: [
+                          Icon(Icons.support_agent, size: 20, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text('Oficial 3: Ayudantes'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem<UserRole>(
+                      value: UserRole.oficial4,
+                      child: Row(
+                        children: [
+                          Icon(Icons.flag, size: 20, color: Colors.purple),
+                          SizedBox(width: 8),
+                          Text('Oficial 4: Teniente a cargo de EPP'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem<UserRole>(
+                      value: UserRole.oficial5,
+                      child: Row(
+                        children: [
+                          Icon(Icons.settings_applications, size: 20, color: Colors.teal),
+                          SizedBox(width: 8),
+                          Text('Oficial 5: Solo administracion de EPP'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem<UserRole>(
+                      value: UserRole.oficial6,
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_balance_wallet, size: 20, color: Colors.indigo),
+                          SizedBox(width: 8),
+                          Text('Oficial 6: Tesorero'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem<UserRole>(
+                      value: UserRole.bombero,
                       child: Row(
                         children: [
                           Icon(Icons.person, size: 20, color: Colors.grey),
                           SizedBox(width: 8),
-                          Text('Bombero (solo solicitudes)'),
+                          Text('Bombero'),
                         ],
                       ),
                     ),
@@ -1049,16 +1124,152 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 24),
+                
+                // Sección de Tesorería
+                const Text(
+                  'Información de Tesorería',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                
+                // Checkbox: Es estudiante
+                CheckboxListTile(
+                  title: const Text('Es estudiante'),
+                  subtitle: const Text('Paga cuota reducida'),
+                  value: _isStudent,
+                  onChanged: (value) {
+                    setState(() {
+                      _isStudent = value ?? false;
+                      // Si desmarca estudiante, limpiar fechas de estudiante
+                      if (!_isStudent) {
+                        _studentStartDate = null;
+                        _studentEndDate = null;
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 12),
+                
+                // Fechas de estudiante (solo si isStudent es true)
+                if (_isStudent) ...[
+                  // Fecha de inicio de periodo estudiante
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _studentStartDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _studentStartDate = picked;
+                          // Si la fecha de fin es antes que la de inicio, limpiarla
+                          if (_studentEndDate != null && _studentEndDate!.isBefore(picked)) {
+                            _studentEndDate = null;
+                          }
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Inicio período estudiante',
+                        hintText: 'Fecha de inicio como estudiante',
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        _studentStartDate != null
+                            ? '${_studentStartDate!.day}/${_studentStartDate!.month}/${_studentStartDate!.year}'
+                            : 'No especificado',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Fecha de fin de periodo estudiante  
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _studentEndDate ?? (_studentStartDate ?? DateTime.now()),
+                        firstDate: _studentStartDate ?? DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null) setState(() => _studentEndDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Fin período estudiante (opcional)',
+                        hintText: 'Dejar vacío si actualmente es estudiante',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_studentEndDate != null)
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 20),
+                                onPressed: () => setState(() => _studentEndDate = null),
+                                tooltip: 'Limpiar fecha',
+                              ),
+                            const Icon(Icons.calendar_today),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        _studentEndDate != null
+                            ? '${_studentEndDate!.day}/${_studentEndDate!.month}/${_studentEndDate!.year}'
+                            : 'Actualmente estudiante',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
+                // Fecha de inicio de pagos
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _paymentStartDate ?? DateTime.now(),
+                      firstDate: DateTime(2025),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) setState(() => _paymentStartDate = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Fecha inicio pagos',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                    child: Text(
+                      _paymentStartDate != null
+                          ? '${_paymentStartDate!.day}/${_paymentStartDate!.month}/${_paymentStartDate!.year}'
+                          : 'No paga cuotas',
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
-      actions: [
+      // Actions
+      const Divider(height: 1),
+      Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
+        const SizedBox(width: 8),
         ElevatedButton(
           onPressed: _isSaving ? null : _save,
           child: _isSaving
@@ -1070,6 +1281,12 @@ class _UserFormDialogState extends State<_UserFormDialog> {
               : Text(widget.user == null ? 'Crear' : 'Guardar'),
         ),
       ],
+    ),
+      ),
+    ],
+  ),
+      ),
     );
   }
 }
+

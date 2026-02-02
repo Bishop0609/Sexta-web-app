@@ -69,8 +69,14 @@ class SupabaseService {
       'directora': 1,
       'secretario': 2,
       'secretaria': 2,
+      'pro-secretario': 2,
+      'pro-secretario(a)': 2,
+      'pro-secretaria': 2,
       'tesorero': 3,
       'tesorera': 3,
+      'pro-tesorero': 3,
+      'pro-tesorero(a)': 3,
+      'pro-tesorera': 3,
       'capitán': 4,
       'capitan': 4,
       'teniente 1°': 5,
@@ -307,6 +313,31 @@ class SupabaseService {
       'reviewed_by': reviewedBy,
       'reviewed_at': DateTime.now().toIso8601String(),
     }).eq('id', permissionId);
+  }
+
+  /// Obtener permisos aprobados entre fechas (para reportes)
+  /// Retorna permisos cuyo período CONTIENE las fechas seleccionadas
+  Future<List<Map<String, dynamic>>> getApprovedPermissionsBetweenDates(
+    DateTime startDate,
+    DateTime endDate, {
+    String? userId, // Opcional: filtrar por bombero específico
+  }) async {
+    final startStr = startDate.toIso8601String().split('T')[0];
+    final endStr = endDate.toIso8601String().split('T')[0];
+    
+    var query = client
+        .from(AppConstants.permissionsTable)
+        .select('*, user:user_id(*)')
+        .eq('status', 'approved')
+        .lte('start_date', startStr)
+        .gte('end_date', endStr);
+    
+    // Si se especifica un userId, filtrar por ese usuario
+    if (userId != null) {
+      query = query.eq('user_id', userId);
+    }
+    
+    return await query.order('start_date');
   }
 
   // ============================================

@@ -244,7 +244,7 @@ Una vez confirmado que todo funciona:
    .\build-deploy.ps1
    ```
 3. ✅ **Subir a iHost.cl** según `DEPLOYMENT_IHOST.md`
-4. ✅ **Probar en:** `https://sexta.tiendanatalia.cl`
+4. ✅ **Probar en:** `https://sgi.sextacoquimbo.cl`
 
 ---
 

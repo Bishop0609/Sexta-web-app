@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sexta_app/core/constants/app_constants.dart';
 
 /// Service for sending emails via Resend API
@@ -9,6 +10,40 @@ class EmailService {
   EmailService._internal();
 
   static const String _baseUrl = 'https://api.resend.com/emails';
+  final _supabase = Supabase.instance.client;
+
+  /// Send email via Supabase Edge Function (solves CORS issues)
+  Future<bool> _sendViaEdgeFunction({
+    required String emailType,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      print('📤 Enviando email via Edge Function: $emailType');
+      print('   Datos: $data');
+      
+      final response = await _supabase.functions.invoke(
+        'send-email',
+        body: {
+          'type': emailType,
+          'data': data,
+        },
+      );
+
+      print('   Response status: ${response.status}');
+      print('   Response data: ${response.data}');
+      
+      if (response.status == 200) {
+        print('   ✅ Email enviado exitosamente via Edge Function');
+        return true;
+      } else {
+        print('   ❌ Error: ${response.status} - ${response.data}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Excepción enviando email via Edge Function: $e');
+      return false;
+    }
+  }
 
   Future<bool> _sendEmail({
     required String to,
@@ -16,6 +51,11 @@ class EmailService {
     required String htmlContent,
   }) async {
     try {
+      print('📤 Intentando enviar email a: $to');
+      print('   From: ${AppConstants.resendFromEmail}');
+      print('   Subject: $subject');
+      print('   API Key: ${AppConstants.resendApiKey.substring(0, 10)}...');
+      
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
@@ -30,68 +70,42 @@ class EmailService {
         }),
       );
 
-      return response.statusCode == 200;
+      print('   Response status: ${response.statusCode}');
+      print('   Response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        print('   ✅ Email enviado exitosamente');
+        return true;
+      } else {
+        print('   ❌ Error: ${response.statusCode} - ${response.body}');
+        return false;
+      }
     } catch (e) {
-      print('Error sending email: $e');
+      print('❌ Excepción enviando email: $e');
       return false;
     }
   }
 
   /// Notifica a los oficiales sobre una nueva solicitud de permiso
   Future<bool> sendPermissionRequestNotification({
-    required String officerEmail,
+    required dynamic officerEmail, // Puede ser String o List<String>
     required String firefighterName,
     required String startDate,
     required String endDate,
     required String reason,
   }) async {
-    final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background-color: #D32F2F; color: white; padding: 20px; text-align: center; }
-    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
-    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-    .button { 
-      display: inline-block; 
-      background-color: #D32F2F; 
-      color: white; 
-      padding: 12px 24px; 
-      text-decoration: none; 
-      border-radius: 4px; 
-      margin: 10px 0;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Nueva Solicitud de Permiso</h1>
-    </div>
-    <div class="content">
-      <p><strong>Bombero:</strong> $firefighterName</p>
-      <p><strong>Período:</strong> $startDate - $endDate</p>
-      <p><strong>Motivo:</strong></p>
-      <p>$reason</p>
-    </div>
-    <p style="text-align: center;">
-      <a href="#" class="button">Revisar Solicitud</a>
-    </p>
-    <div class="footer">
-      <p>Sistema de Gestión Integral - Sexta Compañía</p>
-    </div>
-  </div>
-</body>
-</html>
-''';
-
-    return await _sendEmail(
-      to: officerEmail,
-      subject: 'Nueva Solicitud de Permiso - $firefighterName',
-      htmlContent: htmlContent,
+    // Convertir a lista si es String
+    final emails = officerEmail is List ? officerEmail : [officerEmail];
+    
+    return await _sendViaEdgeFunction(
+      emailType: 'permission_review',
+      data: {
+        'officerEmail': emails, // Enviar como array
+        'firefighterName': firefighterName,
+        'startDate': startDate,
+        'endDate': endDate,
+        'reason': reason,
+      },
     );
   }
 
@@ -100,70 +114,44 @@ class EmailService {
     required String firefighterEmail,
     required String firefighterName,
     required bool approved,
+    required String startDate,
+    required String endDate,
+    required String reason,
     String? rejectionReason,
   }) async {
-    final status = approved ? 'APROBADA' : 'RECHAZADA';
-    final statusColor = approved ? '#2E7D32' : '#C62828';
-    final message = approved 
-        ? 'Tu solicitud de permiso ha sido aprobada.'
-        : 'Tu solicitud de permiso ha sido rechazada.';
-    
-    final rejectionSection = !approved && rejectionReason != null
-        ? '''
-        <div style="background-color: #FFEBEE; padding: 15px; border-left: 4px solid #C62828; margin: 15px 0;">
-          <p><strong>Motivo del rechazo:</strong></p>
-          <p>$rejectionReason</p>
-        </div>
-        '''
-        : '';
-
-    final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background-color: #D32F2F; color: white; padding: 20px; text-align: center; }
-    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
-    .status { 
-      background-color: $statusColor; 
-      color: white; 
-      padding: 15px; 
-      text-align: center; 
-      font-size: 18px; 
-      font-weight: bold; 
-      border-radius: 4px; 
-      margin: 20px 0;
-    }
-    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Respuesta a Solicitud de Permiso</h1>
-    </div>
-    <div class="status">$status</div>
-    <div class="content">
-      <p>Estimado/a $firefighterName,</p>
-      <p>$message</p>
-      $rejectionSection
-    </div>
-    <div class="footer">
-      <p>Sistema de Gestión Integral - Sexta Compañía</p>
-    </div>
-  </div>
-</body>
-</html>
-''';
-
-    return await _sendEmail(
-      to: firefighterEmail,
-      subject: 'Solicitud de Permiso $status',
-      htmlContent: htmlContent,
+    return await _sendViaEdgeFunction(
+      emailType: approved ? 'permission_approved' : 'permission_rejected',
+      data: {
+        'firefighterEmail': firefighterEmail,
+        'firefighterName': firefighterName,
+        'startDate': startDate,
+        'endDate': endDate,
+        'reason': reason,
+        if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      },
     );
   }
+
+  /// Notifica al solicitante que su permiso fue recibido
+  Future<bool> sendPermissionSubmittedConfirmation({
+    required String userEmail,
+    required String firefighterName,
+    required String startDate,
+    required String endDate,
+    required String reason,
+  }) async {
+    return await _sendViaEdgeFunction(
+      emailType: 'permission_submitted',
+      data: {
+        'userEmail': userEmail,
+        'firefighterName': firefighterName,
+        'startDate': startDate,
+        'endDate': endDate,
+        'reason': reason,
+      },
+    );
+  }
+
 
   /// Notifica asignación de guardia
   Future<bool> sendShiftAssignmentNotification({
@@ -242,6 +230,311 @@ Future<bool> sendWelcomeEmail({
       to: userEmail,
       subject: 'Bienvenido - Sexta Compañía',
       htmlContent: html,
+    );
+  }
+
+  // =====================================================
+  // MÓDULO ACTIVIDADES
+  // =====================================================
+
+  /// Notifica a todos los usuarios sobre una nueva actividad creada
+  Future<bool> sendActivityCreatedNotification({
+    required String userEmail,
+    required String userName,
+    required String activityTitle,
+    required String activityType,
+    required String activityDate,
+    String? activityTime,
+    String? location,
+    String? description,
+  }) async {
+    // Lista de emails genéricos a excluir
+    const excludedEmails = [
+      'notengo@gmail.com',
+      'notiene@gmail.com',
+    ];
+    
+    // No enviar a emails excluidos
+    if (excludedEmails.contains(userEmail.toLowerCase())) {
+      return false;
+    }
+
+    // Usar Edge Function en lugar de llamada directa a Resend
+    return await _sendViaEdgeFunction(
+      emailType: 'activity_created',
+      data: {
+        'userEmail': userEmail,
+        'userName': userName,
+        'activityTitle': activityTitle,
+        'activityType': activityType,
+        'activityDate': activityDate,
+        'activityTime': activityTime,
+        'location': location,
+        'description': description,
+      },
+    );
+  }
+
+  /// Notifica sobre modificación de una actividad
+  Future<bool> sendActivityModifiedNotification({
+    required String userEmail,
+    required String userName,
+    required String activityTitle,
+    required String activityDate,
+    String? activityTime,
+  }) async {
+    // Usar Edge Function en lugar de llamada directa a Resend
+    return await _sendViaEdgeFunction(
+      emailType: 'activity_modified',
+      data: {
+        'userEmail': userEmail,
+        'userName': userName,
+        'activityTitle': activityTitle,
+        'activityDate': activityDate,
+        'activityTime': activityTime,
+      },
+    );
+  }
+
+  /// Recordatorio de actividad (24h o 48h antes)
+  Future<bool> sendActivityReminderNotification({
+    required String userEmail,
+    required String userName,
+    required String activityTitle,
+    required String activityType,
+    required String activityDate,
+    String? activityTime,
+    String? location,
+    required int hoursBefore,
+  }) async {
+    // Usar Edge Function en lugar de llamada directa a Resend
+    final emailType = hoursBefore == 24 ? 'activity_reminder_24h' : 'activity_reminder_48h';
+    
+    return await _sendViaEdgeFunction(
+      emailType: emailType,
+      data: {
+        'userEmail': userEmail,
+        'userName': userName,
+        'activityTitle': activityTitle,
+        'activityType': activityType,
+        'activityDate': activityDate,
+        'activityTime': activityTime,
+        'location': location,
+        'hoursBefore': hoursBefore,
+      },
+    );
+  }
+
+  // =====================================================
+  // MÓDULO GUARDIA NOCTURNA
+  // =====================================================
+
+  /// Recordatorio de guardia (24h o 48h antes)
+  Future<bool> sendShiftReminderNotification({
+    required String firefighterEmail,
+    required String firefighterName,
+    required String shiftDate,
+    required int hoursBefore,
+  }) async {
+    final reminderText = hoursBefore == 24 ? 'mañana' : 'en 2 días';
+
+    final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #1A237E; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .reminder { background-color: #E8EAF6; padding: 15px; border-left: 4px solid #1A237E; margin: 15px 0; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🌙 Recordatorio de Guardia</h1>
+    </div>
+    <div class="content">
+      <p>Estimado/a $firefighterName,</p>
+      <div class="reminder">
+        <p><strong>Recordatorio: Tienes guardia $reminderText</strong></p>
+        <p style="font-size: 20px; font-weight: bold; text-align: center; color: #1A237E;">
+          $shiftDate
+        </p>
+      </div>
+      <p>Recuerda presentarte puntualmente y realizar el check-in en el sistema.</p>
+    </div>
+    <div class="footer">
+      <p>Sistema de Gestión Integral - Sexta Compañía</p>
+    </div>
+  </div>
+</body>
+</html>
+''';
+
+    return await _sendEmail(
+      to: firefighterEmail,
+      subject: 'Recordatorio: Guardia $reminderText - $shiftDate',
+      htmlContent: htmlContent,
+    );
+  }
+
+  // =====================================================
+  // MÓDULO TESORERÍA
+  // =====================================================
+
+  /// Notifica generación de cuota mensual
+  Future<bool> sendQuotaGeneratedNotification({
+    required String userEmail,
+    required String userName,
+    required int quotaAmount,
+    required String month,
+    required int year,
+  }) async {
+    final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #2E7D32; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .amount { background-color: #E8F5E9; padding: 20px; text-align: center; border-radius: 8px; margin: 15px 0; }
+    .amount-value { font-size: 32px; font-weight: bold; color: #2E7D32; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💰 Cuota Mensual Generada</h1>
+    </div>
+    <div class="content">
+      <p>Estimado/a $userName,</p>
+      <p>Se ha generado tu cuota correspondiente a <strong>$month $year</strong>:</p>
+      <div class="amount">
+        <p style="margin: 0; color: #666;">Monto a pagar:</p>
+        <p class="amount-value">\$$quotaAmount</p>
+      </div>
+      <p>Puedes realizar el pago en el cuartel o mediante transferencia bancaria.</p>
+    </div>
+    <div class="footer">
+      <p>Sistema de Gestión Integral - Sexta Compañía</p>
+    </div>
+  </div>
+</body>
+</html>
+''';
+
+    return await _sendEmail(
+      to: userEmail,
+      subject: 'Cuota Mensual $month $year - \$$quotaAmount',
+      htmlContent: htmlContent,
+    );
+  }
+
+  /// Notifica confirmación de pago registrado
+  Future<bool> sendPaymentConfirmationNotification({
+    required String userEmail,
+    required String userName,
+    required int paidAmount,
+    required String paymentDate,
+    required String month,
+    required int year,
+  }) async {
+    final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #2E7D32; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .success { background-color: #E8F5E9; padding: 15px; border-left: 4px solid #2E7D32; margin: 15px 0; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✅ Pago Registrado</h1>
+    </div>
+    <div class="content">
+      <p>Estimado/a $userName,</p>
+      <div class="success">
+        <p><strong>Se ha registrado tu pago exitosamente</strong></p>
+        <p><strong>Monto:</strong> \$$paidAmount</p>
+        <p><strong>Fecha:</strong> $paymentDate</p>
+        <p><strong>Período:</strong> $month $year</p>
+      </div>
+      <p>Gracias por tu puntualidad.</p>
+    </div>
+    <div class="footer">
+      <p>Sistema de Gestión Integral - Sexta Compañía</p>
+    </div>
+  </div>
+</body>
+</html>
+''';
+
+    return await _sendEmail(
+      to: userEmail,
+      subject: 'Pago Registrado - $month $year',
+      htmlContent: htmlContent,
+    );
+  }
+
+  /// Recordatorio de cuota pendiente
+  Future<bool> sendPaymentReminderNotification({
+    required String userEmail,
+    required String userName,
+    required int pendingAmount,
+    required String month,
+    required int year,
+  }) async {
+    final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #F57C00; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .warning { background-color: #FFF3E0; padding: 15px; border-left: 4px solid #F57C00; margin: 15px 0; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⏰ Recordatorio de Pago</h1>
+    </div>
+    <div class="content">
+      <p>Estimado/a $userName,</p>
+      <div class="warning">
+        <p><strong>Tienes una cuota pendiente de pago</strong></p>
+        <p><strong>Período:</strong> $month $year</p>
+        <p><strong>Monto pendiente:</strong> \$$pendingAmount</p>
+      </div>
+      <p>Por favor, regulariza tu situación a la brevedad.</p>
+    </div>
+    <div class="footer">
+      <p>Sistema de Gestión Integral - Sexta Compañía</p>
+    </div>
+  </div>
+</body>
+</html>
+''';
+
+    return await _sendEmail(
+      to: userEmail,
+      subject: 'Recordatorio: Cuota Pendiente $month $year',
+      htmlContent: htmlContent,
     );
   }
 }

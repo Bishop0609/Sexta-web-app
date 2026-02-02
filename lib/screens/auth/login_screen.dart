@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/widgets/app_drawer.dart';
+import 'package:sexta_app/providers/user_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -84,11 +85,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Logo/Icono
-                      Icon(
-                        Icons.local_fire_department,
-                        size: 80,
-                        color: AppTheme.institutionalRed,
+                      // Logo SGI
+                      Image.asset(
+                        'assets/images/logo_sgi.png',
+                        height: 120,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.local_fire_department,
+                            size: 80,
+                            color: AppTheme.institutionalRed,
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       
@@ -102,13 +110,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Sistema de Gestión Integral',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
                       const SizedBox(height: 40),
                       
                       // RUT
@@ -189,9 +190,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               builder: (context) => AlertDialog(
                                 title: const Text('Recuperar Contraseña'),
                                 content: const Text(
-                                  'Para recuperar tu contraseña, contacta al administrador del sistema.\n\n'
-                                  'Email: admin@sextacompania.cl\n'
-                                  'Teléfono: +56 9 XXXX XXXX',
+                                  'Para recuperar tu contraseña, contacta a uno de los ayudantes.\n\n'
+                                  'Email: ayudantec6@bomberosdecoquimbo.cl',
                                 ),
                                 actions: [
                                   TextButton(

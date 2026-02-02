@@ -4,6 +4,7 @@ import 'package:sexta_app/widgets/branded_app_bar.dart';
 import 'package:sexta_app/services/supabase_service.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/services/email_service.dart';
+import 'package:sexta_app/services/pdf_service.dart';
 import 'package:intl/intl.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 
@@ -19,6 +20,7 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
   final _supabase = SupabaseService();
   final _authService = AuthService();
   final _emailService = EmailService();
+  final _pdfService = PdfService();
 
   late TabController _tabController;
   List<Map<String, dynamic>> _pendingPermissions = [];
@@ -133,6 +135,64 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
     );
   }
 
+  Future<void> _showReportDialog() async {
+    // Mostrar diálogo de configuración del reporte
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _ReportConfigDialog(
+        initialDateRange: _dateRange,
+      ),
+    );
+
+    if (result != null && mounted) {
+      final dateRange = result['dateRange'] as DateTimeRange;
+      final userId = result['userId'] as String?; // null = "Todos"
+      final firefighterName = result['firefighterName'] as String?;
+
+      // Mostrar indicador de carga
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      try {
+        // Obtener permisos aprobados entre las fechas
+        final permissions = await _supabase.getApprovedPermissionsBetweenDates(
+          dateRange.start,
+          dateRange.end,
+          userId: userId, // Filtrar por bombero si se seleccionó uno
+        );
+
+        // Cerrar indicador de carga
+        if (mounted) Navigator.of(context).pop();
+
+        // Generar PDF
+        await _pdfService.generatePermissionsReport(
+          permissions: permissions,
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+          firefighterName: firefighterName, // Para el título del PDF
+        );
+      } catch (e) {
+        // Cerrar indicador de carga
+        if (mounted) Navigator.of(context).pop();
+        
+        // Mostrar error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error generando reporte: $e'),
+              backgroundColor: AppTheme.criticalColor,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _updatePermissionStatus(
     String permissionId,
     bool approved,
@@ -151,12 +211,18 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
           .firstWhere((p) => p['id'] == permissionId);
       final userEmail = permission['user']['email'] as String?;
       final userName = permission['user']['full_name'] as String;
+      final startDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(permission['start_date']));
+      final endDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(permission['end_date']));
+      final reason = permission['reason'] as String;
 
       if (userEmail != null) {
         await _emailService.sendPermissionDecisionNotification(
           firefighterEmail: userEmail,
           firefighterName: userName,
           approved: approved,
+          startDate: startDate,
+          endDate: endDate,
+          reason: reason,
           rejectionReason: rejectionReason,
         );
       }
@@ -201,6 +267,12 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
           ],
         ),
         actions: [
+          if (_tabController.index == 1)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf),
+              tooltip: 'Generar Reporte PDF',
+              onPressed: _showReportDialog,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadPermissions,
@@ -743,6 +815,251 @@ class _PermissionDetailDialogState extends State<_PermissionDetailDialog> {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+// Diálogo de configuración del reporte PDF
+class _ReportConfigDialog extends StatefulWidget {
+  final DateTimeRange? initialDateRange;
+
+  const _ReportConfigDialog({this.initialDateRange});
+
+  @override
+  State<_ReportConfigDialog> createState() => _ReportConfigDialogState();
+}
+
+class _ReportConfigDialogState extends State<_ReportConfigDialog> {
+  final _supabase = SupabaseService();
+  DateTimeRange? _dateRange;
+  String? _selectedUserId; // null = "Todos"
+  String? _selectedUserName;
+  List<Map<String, dynamic>> _allUsers = [];
+  List<Map<String, dynamic>> _filteredUsers = [];
+  final TextEditingController _searchController = TextEditingController();
+  bool _isLoadingUsers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _dateRange = widget.initialDateRange;
+    _loadUsers();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    try {
+      final users = await _supabase.getAllUsers();
+      setState(() {
+        _allUsers = users.map((u) => u.toJson()).toList();
+        _filteredUsers = _allUsers;
+        _isLoadingUsers = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingUsers = false);
+    }
+  }
+
+  void _filterUsers(String query) {
+    if (query.isEmpty) {
+      setState(() => _filteredUsers = _allUsers);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    setState(() {
+      _filteredUsers = _allUsers.where((user) {
+        final name = (user['full_name'] as String).toLowerCase();
+        return name.contains(lowerQuery);
+      }).toList();
+    });
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDateRange: _dateRange,
+      helpText: 'Seleccionar rango de fechas',
+    );
+
+    if (picked != null) {
+      setState(() => _dateRange = picked);
+    }
+  }
+
+  void _generateReport() {
+    if (_dateRange == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor seleccione un rango de fechas'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop({
+      'dateRange': _dateRange,
+      'userId': _selectedUserId,
+      'firefighterName': _selectedUserName,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Configurar Reporte PDF'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Selector de fechas
+              Text(
+                'Rango de Fechas',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _selectDateRange,
+                icon: const Icon(Icons.date_range),
+                label: Text(
+                  _dateRange == null
+                      ? 'Seleccionar fechas'
+                      : '${DateFormat('dd/MM/yyyy').format(_dateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_dateRange!.end)}',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  alignment: Alignment.centerLeft,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Selector de bombero
+              Text(
+                'Bombero',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+
+              // Opción "Todos"
+              RadioListTile<String?>(
+                title: const Text(
+                  'Todos los bomberos',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                value: null,
+                groupValue: _selectedUserId,
+                onChanged: (value) {
+                  setState(() {
+                    _selectedUserId = null;
+                    _selectedUserName = null;
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+
+              const Divider(),
+
+              // Búsqueda de bombero específico
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Buscar bombero...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            _filterUsers('');
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  isDense: true,
+                ),
+                onChanged: _filterUsers,
+              ),
+              const SizedBox(height: 8),
+
+              // Lista de bomberos
+              if (_isLoadingUsers)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_filteredUsers.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'No se encontraron bomberos',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _filteredUsers.length,
+                    itemBuilder: (context, index) {
+                      final user = _filteredUsers[index];
+                      final userId = user['id'] as String;
+                      final userName = user['full_name'] as String;
+                      final rank = user['rank'] as String?;
+
+                      return RadioListTile<String>(
+                        title: Text(userName),
+                        subtitle: rank != null ? Text(rank) : null,
+                        value: userId,
+                        groupValue: _selectedUserId,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedUserId = userId;
+                            _selectedUserName = userName;
+                          });
+                        },
+                        dense: true,
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _generateReport,
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('Generar Reporte'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.navyBlue,
+          ),
+        ),
       ],
     );
   }

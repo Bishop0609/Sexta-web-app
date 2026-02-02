@@ -5,6 +5,7 @@ import 'package:sexta_app/widgets/app_drawer.dart';
 import 'package:sexta_app/widgets/branded_app_bar.dart';
 import 'package:sexta_app/services/supabase_service.dart';
 import 'package:sexta_app/services/auth_service.dart';
+import 'package:sexta_app/services/email_service.dart';
 import 'package:sexta_app/models/activity_model.dart';
 import 'package:sexta_app/models/user_model.dart';
 
@@ -298,12 +299,19 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
   final _locationController = TextEditingController();
   final _supabase = SupabaseService();
   final _authService = AuthService();
+  final _emailService = EmailService();
 
   ActivityType _selectedType = ActivityType.academiaCompania;
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
   bool _isSaving = false;
+  
+  // Configuración de notificaciones
+  bool _notifyNow = true;
+  bool _notify24h = true;
+  bool _notify48h = true;
+  Set<String> _notifyGroups = {'all'};
 
   @override
   void initState() {
@@ -316,6 +324,7 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
       _selectedType = activityTypeFromString(activity['activity_type'] as String);
       _selectedDate = DateTime.parse(activity['activity_date'] as String);
       
+      // Parse times
       if (activity['start_time'] != null) {
         final parts = (activity['start_time'] as String).split(':');
         _startTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
@@ -323,6 +332,15 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
       if (activity['end_time'] != null) {
         final parts = (activity['end_time'] as String).split(':');
         _endTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+      
+      // Parse notification settings
+      _notifyNow = activity['notify_now'] as bool? ?? true;
+      _notify24h = activity['notify_24h'] as bool? ?? true;
+      _notify48h = activity['notify_48h'] as bool? ?? true;
+      final groups = activity['notify_groups'] as List<dynamic>?;
+      if (groups != null && groups.isNotEmpty) {
+        _notifyGroups = groups.cast<String>().toSet();
       }
     }
   }
@@ -359,21 +377,52 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
             : null,
         'location': _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
         'created_by': _authService.currentUserId!,
+        // Configuración de notificaciones
+        'notify_now': _notifyNow,
+        'notify_24h': _notify24h,
+        'notify_48h': _notify48h,
+        'notify_groups': _notifyGroups.toList(),
       };
 
-      if (widget.activity == null) {
+      final isNewActivity = widget.activity == null;
+      
+      if (isNewActivity) {
         data['created_by'] = _authService.currentUser!.id;
         await _supabase.createActivity(data);
       } else {
         final userId = _authService.currentUser!.id;
         await _supabase.updateActivity(widget.activity!['id'], data, userId);
+        
+        // Si se cambió la fecha, limpiar recordatorios antiguos
+        final oldDate = widget.activity!['activity_date'] as String;
+        final newDate = data['activity_date'] as String;
+        
+        if (oldDate != newDate) {
+          print('📅 Fecha cambiada: $oldDate -> $newDate');
+          print('🗑️  Limpiando recordatorios antiguos...');
+          
+          try {
+            await _supabase.client
+                .from('sent_reminders')
+                .delete()
+                .eq('reference_id', widget.activity!['id']);
+            
+            print('✅ Recordatorios antiguos eliminados');
+          } catch (e) {
+            print('⚠️  Error limpiando recordatorios: $e');
+            // No fallar si hay error limpiando recordatorios
+          }
+        }
       }
+
+      // Enviar notificaciones por email a todos los usuarios
+      _sendEmailNotifications(isNewActivity, data);
 
       if (mounted) {
         widget.onSave();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.activity == null ? 'Actividad creada' : 'Actividad actualizada'),
+            content: Text(isNewActivity ? 'Actividad creada' : 'Actividad actualizada'),
             backgroundColor: AppTheme.efectivaColor,
           ),
         );
@@ -389,6 +438,184 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  /// Envía notificaciones por email a los usuarios seleccionados
+  Future<void> _sendEmailNotifications(bool isNewActivity, Map<String, dynamic> data) async {
+    try {
+      // Solo enviar si "Enviar ahora" está marcado
+      if (!_notifyNow) return;
+      
+      // Obtener todos los usuarios
+      final response = await _supabase.client
+          .from('users')
+          .select()
+          .order('full_name');
+      
+      final allUsers = (response as List).map((json) => UserModel.fromJson(json)).toList();
+      
+      // Filtrar usuarios según grupos seleccionados
+      final filteredUsers = _filterUsersByGroups(allUsers, _notifyGroups);
+      
+      // Preparar datos para el email
+      final activityTitle = data['title'] as String;
+      final activityType = activityTypeFromString(data['activity_type'] as String).displayName;
+      final activityDate = DateFormat('dd/MM/yyyy').format(_selectedDate!);
+      final activityTime = _startTime != null
+          ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
+          : null;
+      final location = data['location'] as String?;
+      final description = data['description'] as String?;
+      
+      // Enviar emails
+      print('📧 Enviando emails a ${filteredUsers.length} usuarios...');
+      int emailsSent = 0;
+      int emailsFailed = 0;
+      
+      for (final user in filteredUsers) {
+        if (user.email == null || user.email!.isEmpty) continue;
+        
+        try {
+          if (isNewActivity) {
+            final success = await _emailService.sendActivityCreatedNotification(
+              userEmail: user.email!,
+              userName: user.fullName,
+              activityTitle: activityTitle,
+              activityType: activityType,
+              activityDate: activityDate,
+              activityTime: activityTime,
+              location: location,
+              description: description,
+            );
+            if (success) {
+              emailsSent++;
+              print('✅ Email enviado a: ${user.fullName} (${user.email})');
+            } else {
+              emailsFailed++;
+              print('❌ Error enviando email a: ${user.fullName} (${user.email})');
+            }
+          } else {
+            final success = await _emailService.sendActivityModifiedNotification(
+              userEmail: user.email!,
+              userName: user.fullName,
+              activityTitle: activityTitle,
+              activityDate: activityDate,
+              activityTime: activityTime,
+            );
+            if (success) {
+              emailsSent++;
+              print('✅ Email enviado a: ${user.fullName} (${user.email})');
+            } else {
+              emailsFailed++;
+              print('❌ Error enviando email a: ${user.fullName} (${user.email})');
+            }
+          }
+        } catch (e) {
+          emailsFailed++;
+          print('❌ Excepción enviando email a ${user.fullName}: $e');
+        }
+        
+        // Delay de 500ms para respetar el rate limit de Resend (2 requests/segundo)
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
+      print('📊 Resumen: $emailsSent enviados, $emailsFailed fallidos');
+    } catch (e) {
+      // No fallar si hay error en emails, solo registrar
+      print('Error enviando notificaciones: $e');
+    }
+  }
+  
+  /// Filtra usuarios según los grupos seleccionados
+  List<UserModel> _filterUsersByGroups(List<UserModel> users, Set<String> groups) {
+    // Si "Todos" está seleccionado, devolver todos los usuarios
+    if (groups.contains('all')) {
+      return users;
+    }
+    
+    return users.where((user) {
+      // Oficiales: usuarios con roles de oficial
+      if (groups.contains('officers') && _isOfficer(user)) {
+        return true;
+      }
+      
+      // Consejeros de Disciplina: usuarios con cargo específico (definir más tarde)
+      if (groups.contains('discipline_council') && _isDisciplineCouncilor(user)) {
+        return true;
+      }
+      
+      // Postulantes/Aspirantes: usuarios con rangos específicos
+      if (groups.contains('applicants') && _isApplicant(user)) {
+        return true;
+      }
+      
+      // Bomberos Activos: usuarios con rol bombero
+      if (groups.contains('active_firefighters') && _isActiveFirefighter(user)) {
+        return true;
+      }
+      
+      // Bomberos Honorarios: usuarios con rango Honorario
+      if (groups.contains('honorary_firefighters') && _isHonoraryFirefighter(user)) {
+        return true;
+      }
+      
+      return false;
+    }).toList();
+  }
+  
+  /// Verifica si el usuario es oficial
+  /// Usa el mismo criterio que el módulo de asistencia (basado en campo 'rank')
+  /// IMPORTANTE: Solo OFICIALES DE COMPAÑÍA (excluye oficiales de cuerpo/generales)
+  bool _isOfficer(UserModel user) {
+    final rankLower = user.rank.toLowerCase();
+    
+    // Solo Oficiales de Compañía (NO incluye oficiales de cuerpo/generales)
+    final companyOfficerPatterns = [
+      'director',
+      'secretari',      // Secretario/a, Pro-Secretario/a
+      'tesorer',        // Tesorero/a, Pro-Tesorero/a
+      'capitán',
+      'teniente',
+      'inspector m.',   // Inspector M. Mayor/Menor
+    ];
+    
+    // Verificar patrones de Oficiales de Compañía
+    for (final pattern in companyOfficerPatterns) {
+      if (rankLower.contains(pattern)) {
+        return true;
+      }
+    }
+    
+    // Caso especial: "Ayudante" SOLO si es de compañía
+    // Excluir "Ayudante de Comandancia" (es oficial de cuerpo)
+    if (rankLower.contains('ayudante') && !rankLower.contains('de comandancia')) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /// Verifica si el usuario es consejero de disciplina
+  /// TODO: Definir criterio específico cuando el usuario lo indique
+  bool _isDisciplineCouncilor(UserModel user) {
+    // Por ahora retornar false, se definirá más tarde
+    return false;
+  }
+  
+  /// Verifica si el usuario es postulante o aspirante
+  bool _isApplicant(UserModel user) {
+    final applicantRanks = ['Postulante', 'Aspirante'];
+    return applicantRanks.contains(user.rank);
+  }
+  
+  /// Verifica si el usuario es bombero activo
+  bool _isActiveFirefighter(UserModel user) {
+    return user.role == UserRole.bombero;
+  }
+  
+  /// Verifica si el usuario es bombero honorario
+  bool _isHonoraryFirefighter(UserModel user) {
+    return user.rank.toLowerCase().contains('honorario');
   }
 
   @override
@@ -525,6 +752,152 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
                     border: OutlineInputBorder(),
                     hintText: 'Detalles adicionales...',
                   ),
+                ),
+                const SizedBox(height: 24),
+
+                // Sección de Notificaciones
+                Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Configuración de Notificaciones',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ¿Cuándo enviar?
+                Text(
+                  '¿Cuándo enviar notificaciones?',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Enviar ahora'),
+                  value: _notifyNow,
+                  onChanged: (value) => setState(() => _notifyNow = value ?? false),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Recordatorio 24 horas antes'),
+                  value: _notify24h,
+                  onChanged: (value) => setState(() => _notify24h = value ?? false),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Recordatorio 48 horas antes'),
+                  value: _notify48h,
+                  onChanged: (value) => setState(() => _notify48h = value ?? false),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // ¿A quién enviar?
+                Text(
+                  '¿A quién enviar?',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Todos los bomberos'),
+                  value: _notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups = {'all'}; // Si selecciona "Todos", deselecciona otros
+                      } else {
+                        _notifyGroups.remove('all');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Oficiales'),
+                  value: _notifyGroups.contains('officers'),
+                  enabled: !_notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups.add('officers');
+                      } else {
+                        _notifyGroups.remove('officers');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Consejeros de Disciplina'),
+                  value: _notifyGroups.contains('discipline_council'),
+                  enabled: !_notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups.add('discipline_council');
+                      } else {
+                        _notifyGroups.remove('discipline_council');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Postulantes/Aspirantes'),
+                  value: _notifyGroups.contains('applicants'),
+                  enabled: !_notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups.add('applicants');
+                      } else {
+                        _notifyGroups.remove('applicants');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Bomberos Activos'),
+                  value: _notifyGroups.contains('active_firefighters'),
+                  enabled: !_notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups.add('active_firefighters');
+                      } else {
+                        _notifyGroups.remove('active_firefighters');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  title: const Text('Bomberos Honorarios'),
+                  value: _notifyGroups.contains('honorary_firefighters'),
+                  enabled: !_notifyGroups.contains('all'),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _notifyGroups.add('honorary_firefighters');
+                      } else {
+                        _notifyGroups.remove('honorary_firefighters');
+                      }
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
               ],
             ),
