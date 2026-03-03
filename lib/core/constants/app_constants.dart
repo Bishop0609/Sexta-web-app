@@ -1,5 +1,8 @@
 /// Constantes de configuración de la aplicación
 class AppConstants {
+  // ── VERSIÓN DE LA APP ── cambiar aquí al publicar nueva versión
+  static const String appVersion = 'V.01.09';
+
   // Configuración de Supabase (placeholder - usuario debe configurar)
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
@@ -17,17 +20,17 @@ class AppConstants {
     defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhaXp4dWpweHl1dHBqY3dvcnRpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzY0Njc5MCwiZXhwIjoyMDgzMjIyNzkwfQ.kpR9aMyIGNz8AbPX2A9iR47s0-MVgPGSYeetm9ZOPSY',
   );
   
-  // Configuración de Resend
-  // TODO: Reemplaza 'TU_API_KEY_AQUI' con tu API Key real de Resend
-  // Ejemplo: 're_abc123def456ghi789jkl012mno345pqr678'
-  static const String resendApiKey = String.fromEnvironment(
-    'RESEND_API_KEY',
-    defaultValue: 're_hgBXdLJx_DwFmAgMHNzNMiW96twfiGoqT', // ← Pega tu API Key aquí
+  // Configuración de Brevo (anteriormente Sendinblue)
+  // TODO: Reemplaza 'TU_API_KEY_AQUI' con tu API Key real de Brevo
+  // Obtén tu API Key en: https://app.brevo.com/ → Settings → SMTP & API → API Keys
+  static const String brevoApiKey = String.fromEnvironment(
+    'BREVO_API_KEY',
+    defaultValue: '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',
   );
   
-  // Para testing: usa 'onboarding@resend.dev'
-  // Para producción: usa 'notificaciones@sextacoquimbo.cl' (requiere verificar dominio)
-  static const String resendFromEmail = 'notificaciones@sextacoquimbo.cl';
+  // Email verificado en Brevo para envío de notificaciones
+  // Dominio sextacoquimbo.cl verificado en Brevo
+  static const String brevoFromEmail = 'notificaciones@sextacoquimbo.cl';
   
   // Configuración de guardia
   static const int maxMalesPerShift = 6;
@@ -52,4 +55,31 @@ class AppConstants {
   static const String shiftAttendanceTable = 'shift_attendance';
   static const String eppAssignmentsTable = 'epp_assignments';
   static const String eppReturnsTable = 'epp_returns';
+  
+  // Nombres de tablas - Guardias
+  static const String guardAttendanceFdsTable = 'guard_attendance_fds';
+  static const String guardAttendanceDiurnaTable = 'guard_attendance_diurna';
+  static const String guardAttendanceNocturnaTable = 'guard_attendance_nocturna';
+  static const String guardAttendanceNocturnaRecordsTable = 'guard_attendance_nocturna_records';
+  static const String guardRosterWeeklyTable = 'guard_roster_weekly';
+  static const String guardRosterDailyTable = 'guard_roster_daily';
+  static const String guardAvailabilityTable = 'guard_availability';
+  
+  // Configuración de guardias - DIURNAS (FDS y Diurna)
+  static const int maxBomberosPerDayGuard = 10; // Bomberos en guardias diurnas
+  static const int maxTotalDayGuard = 13; // Total: Maq1 + Maq2 + OBAC + 10 Bomberos
+  
+  // Configuración de guardias - NOCTURNAS
+  static const int maxTotalNightGuard = 10; // Total de camas disponibles
+  static const int maxBomberosPerNightGuard = 8; // Bomberos (10 - maquinista - obac)
+  static const int maxMalesPerNightGuard = 6; // Máximo hombres
+  static const int maxFemalesPerNightGuard = 4; // Máximo mujeres
+  
+  // Ventanas de tiempo para edición de guardias
+  static const int guardViewWindowHours = 2;
+  static const int guardEditWindowHours = 1;
+  
+  // Horarios de guardia nocturna
+  static const int nightGuardStartHour = 23; // 23:00
+  static const int nightGuardEndHour = 8; // 08:00
 }

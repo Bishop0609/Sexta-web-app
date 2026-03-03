@@ -219,6 +219,40 @@ class TreasuryService {
     }
   }
 
+  /// Distribuir un pago a múltiples meses consecutivos
+  /// Retorna lista de cuotas afectadas con información de distribución
+  Future<List<Map<String, dynamic>>> distributePaymentToMonths({
+    required String userId,
+    required int totalAmount,
+    required int startingMonth,
+    required int startingYear,
+    required DateTime paymentDate,
+    required PaymentMethod paymentMethod,
+    String? receiptNumber,
+    String? notes,
+    required String registeredBy,
+  }) async {
+    try {
+      final response = await _supabase.rpc('distribute_payment_to_months', params: {
+        'p_user_id': userId,
+        'p_total_amount': totalAmount,
+        'p_starting_month': startingMonth,
+        'p_starting_year': startingYear,
+        'p_payment_date': paymentDate.toIso8601String(),
+        'p_payment_method': paymentMethod.name,
+        'p_receipt_number': receiptNumber,
+        'p_notes': notes,
+        'p_registered_by': registeredBy,
+      });
+
+      return List<Map<String, dynamic>>.from(response ?? []);
+    } catch (e) {
+      print('Error distributing payment: $e');
+      rethrow;
+    }
+  }
+
+
   /// Obtener pagos de una cuota
   Future<List<TreasuryPayment>> getQuotaPayments(String quotaId) async {
     try {
@@ -409,6 +443,72 @@ class TreasuryService {
         'success': false,
         'error': e.toString(),
       };
+    }
+  }
+
+  /// Recalcular cuotas de un usuario (útil cuando cambia configuración de estudiante/fechas)
+  Future<Map<String, dynamic>> recalculateUserQuotas(String userId) async {
+    try {
+      final response = await _supabase.rpc('recalculate_user_quotas', params: {
+        'p_user_id': userId,
+      });
+
+      return Map<String, dynamic>.from(response ?? {});
+    } catch (e) {
+      print('Error recalculating quotas: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Obtener estado de cuenta de un usuario
+  Future<Map<String, dynamic>> getUserAccountStatus(String userId) async {
+    try {
+      final response = await _supabase.rpc(
+        'get_user_account_status',
+        params: {'p_user_id': userId},
+      );
+
+      return response as Map<String, dynamic>;
+    } catch (e) {
+      print('Error getting user account status: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Distribuir pago desde las cuotas más antiguas
+  Future<Map<String, dynamic>> distributePaymentFromOldest({
+    required String userId,
+    required int totalAmount,
+    required DateTime paymentDate,
+    required PaymentMethod paymentMethod,
+    String? receiptNumber,
+    String? notes,
+    required String registeredBy,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'distribute_payment_from_oldest',
+        params: {
+          'p_user_id': userId,
+          'p_total_amount': totalAmount,
+          'p_payment_date': paymentDate.toIso8601String().split('T')[0],
+          'p_payment_method': paymentMethod.name,
+          'p_receipt_number': receiptNumber,
+          'p_notes': notes,
+          'p_registered_by': registeredBy,
+        },
+      );
+
+      return response as Map<String, dynamic>;
+    } catch (e) {
+      print('Error distributing payment from oldest: $e');
+      rethrow;
     }
   }
 }

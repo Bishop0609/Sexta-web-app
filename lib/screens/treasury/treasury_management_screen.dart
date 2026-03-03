@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/permissions/role_permissions.dart';
 import '../../models/user_model.dart';
+import '../../models/monthly_quota_model.dart';
 import '../../services/treasury_service.dart';
+import '../../services/user_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/user_provider.dart';
 import 'payment_registration_tab.dart';
@@ -23,17 +25,170 @@ class _TreasuryManagementScreenState extends ConsumerState<TreasuryManagementScr
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TreasuryService _treasuryService = TreasuryService();
+  final UserService _userService = UserService();
+  
+  // Variables para verificación de inconsistencias
+  bool _isCheckingInconsistencies = true;
+  List<Map<String, dynamic>> _inconsistencies = [];
+  bool _showInconsistencyBanner = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _checkForInconsistencies();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+  
+  /// Verificar inconsistencias en datos de tesorería
+  Future<void> _checkForInconsistencies() async {
+    try {
+      final issues = <Map<String, dynamic>>[];
+      
+      // Importar servicios
+      final allUsers = await _userService.getAllUsers();
+      
+      // ISSUE 1: Usuarios con cuotas pero sin fecha de inicio
+      for (var user in allUsers) {
+        final quotas = await _treasuryService.getUserQuotas(user.id);
+        if (quotas.isNotEmpty && user.paymentStartDate == null) {
+          issues.add({
+            'type': 'Cuotas sin fecha inicio',
+            'severity': 'ALTA',
+            'user': user.fullName,
+            'description': 'Tiene ${quotas.length} cuota(s) pero no tiene fecha de inicio',
+          });
+        }
+      }
+      
+      // ISSUE 2: Cuotas marcadas como pagadas con monto menor al esperado
+      for (var user in allUsers.where((u) => u.paymentStartDate != null)) {
+        final quotas = await _treasuryService.getUserQuotas(user.id);
+        final forcedQuotas = quotas.where((q) {
+          return q.status == QuotaStatus.paid && q.paidAmount < q.expectedAmount;
+        }).toList();
+        
+        if (forcedQuotas.isNotEmpty) {
+          issues.add({
+            'type': 'Pago forzado incompleto',
+            'severity': 'MEDIA',
+            'user': user.fullName,
+            'description': '${forcedQuotas.length} cuota(s) pagada(s) con monto menor',
+          });
+        }
+      }
+      
+      // ISSUE 3: Cuotas parciales antiguas (>3 meses)
+      final threeMonthsAgo = DateTime.now().subtract(const Duration(days: 90));
+      for (var user in allUsers.where((u) => u.paymentStartDate != null)) {
+        final quotas = await _treasuryService.getUserQuotas(user.id);
+        final oldPartials = quotas.where((q) {
+          if (q.status != QuotaStatus.partial) return false;
+          final quotaDate = DateTime(q.year, q.month);
+          return quotaDate.isBefore(threeMonthsAgo);
+        }).toList();
+        
+        if (oldPartials.isNotEmpty) {
+          issues.add({
+            'type': 'Deuda parcial antigua',
+            'severity': 'ALTA',
+            'user': user.fullName,
+            'description': '${oldPartials.length} cuota(s) parcial(es) de hace >3 meses',
+          });
+        }
+      }
+      
+      setState(() {
+        _inconsistencies = issues;
+        _showInconsistencyBanner = issues.isNotEmpty;
+        _isCheckingInconsistencies = false;
+      });
+    } catch (e) {
+      print('Error verificando inconsistencias: $e');
+      setState(() {
+        _isCheckingInconsistencies = false;
+      });
+    }
+  }
+  
+  /// Mostrar diálogo con detalles de inconsistencias
+  void _showInconsistencyDetails() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            const Text('Inconsistencias Detectadas'),
+          ],
+        ),
+        content: SizedBox(
+          width: 600,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Se detectaron ${_inconsistencies.length} problema(s) en los datos:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('Severidad')),
+                      DataColumn(label: Text('Tipo')),
+                      DataColumn(label: Text('Usuario')),
+                      DataColumn(label: Text('Descripción')),
+                    ],
+                    rows: _inconsistencies.map((issue) {
+                      return DataRow(cells: [
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: issue['severity'] == 'ALTA' 
+                                  ? Colors.red.shade100 
+                                  : Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              issue['severity'],
+                              style: TextStyle(
+                                color: issue['severity'] == 'ALTA' 
+                                    ? Colors.red.shade900 
+                                    : Colors.orange.shade900,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(Text(issue['type'])),
+                        DataCell(Text(issue['user'])),
+                        DataCell(Text(issue['description'])),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -83,6 +238,55 @@ class _TreasuryManagementScreenState extends ConsumerState<TreasuryManagementScr
               ],
             ),
           ),
+          
+          // Banner de Inconsistencias
+          if (_showInconsistencyBanner)
+            Material(
+              elevation: 4,
+              color: Colors.orange.shade100,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange.shade900, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '⚠️ ${_inconsistencies.length} Inconsistencia(s) Detectada(s)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'Hay problemas en los datos que requieren atención',
+                            style: TextStyle(
+                              color: Colors.orange.shade800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _showInconsistencyDetails,
+                      child: const Text('Ver Detalles'),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => setState(() => _showInconsistencyBanner = false),
+                      tooltip: 'Cerrar',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          
           // Tab Views
           Expanded(
             child: TabBarView(

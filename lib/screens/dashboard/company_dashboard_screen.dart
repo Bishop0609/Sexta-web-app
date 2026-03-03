@@ -90,10 +90,15 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
     for (final event in events as List) {
       final actTypeName = event['act_type']['name'] as String;
       
-      if (actTypeName.toLowerCase().contains('citac') || 
-          actTypeName.toLowerCase().contains('citación')) {
+      if ([
+        'Academia de Compañía',
+        'Academia de Cuerpo',
+        'Citación de Comandancia',
+        'Citación de Superintendencia',
+        'Reunión de Compañía'
+      ].contains(actTypeName)) {
         totalCitations++;
-      } else if (actTypeName.toLowerCase() == 'emergencia') {
+      } else if (actTypeName == 'Emergencia') {
         totalEmergencies++;
       }
     }
@@ -139,10 +144,15 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
         };
       }
       
-      if (actTypeName.toLowerCase().contains('citac') || 
-          actTypeName.toLowerCase().contains('citación')) {
+      if ([
+        'Academia de Compañía',
+        'Academia de Cuerpo',
+        'Citación de Comandancia',
+        'Citación de Superintendencia',
+        'Reunión de Compañía'
+      ].contains(actTypeName)) {
         monthlyData[monthKey]!['citation'] = (monthlyData[monthKey]!['citation'] ?? 0) + 1;
-      } else if (actTypeName.toLowerCase() == 'emergencia') {
+      } else if (actTypeName == 'Emergencia') {
         monthlyData[monthKey]!['emergency'] = (monthlyData[monthKey]!['emergency'] ?? 0) + 1;
       }
     }

@@ -179,15 +179,20 @@ class AuthService {
   /// Returns the generated temporary password to show to admin
   Future<ResetPasswordResult> resetUserPassword(String userId) async {
     try {
-      // 1. Use fixed temporary password for easier communication
       const tempPassword = 'Sexta2026*';
-      
-      // 2. Hash the password
       final passwordHash = hashPassword(tempPassword);
-      
-      // 3. Update password in database with requires_password_change = true
-      await _supabase.updatePasswordWithReset(userId, passwordHash);
-      
+
+      // Verificar si ya existe fila en auth_credentials
+      final existing = await _supabase.getAuthCredentials(userId);
+
+      if (existing == null) {
+        // Usuario nuevo sin credenciales → INSERT
+        await _supabase.createAuthCredentials(userId, passwordHash);
+      } else {
+        // Ya tiene credenciales → UPDATE
+        await _supabase.updatePasswordWithReset(userId, passwordHash);
+      }
+
       return ResetPasswordResult.success(temporaryPassword: tempPassword);
     } catch (e) {
       return ResetPasswordResult.failure('Error reseteando contraseña: $e');

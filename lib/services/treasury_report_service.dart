@@ -71,6 +71,74 @@ class TreasuryReportService {
   }
 
   // ============================================
+  // HELPERS PARA MARCAS DE AGUA EN PDFs
+  // ============================================
+
+  /// Construir header con marca de agua "Desarrollado por GuntherSOFT, 2026"
+  pw.Widget _buildHeaderWithBranding({
+    required String title,
+    required String subtitle,
+    List<String>? additionalLines,
+  }) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                title,
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(
+                subtitle,
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+              ),
+              if (additionalLines != null)
+                ...additionalLines.map((line) => pw.Text(line)),
+            ],
+          ),
+        ),
+        pw.Text(
+          'Desarrollado por\nGuntherSOFT, 2026',
+          style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+          textAlign: pw.TextAlign.right,
+        ),
+      ],
+    );
+  }
+
+  /// Construir footer con marca de agua "Desarrollado por GuntherSOFT, 2026"
+  pw.Widget _buildFooter(pw.Context context) {
+    return pw.Column(
+      children: [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Desarrollado por GuntherSOFT, 2026',
+              style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+            pw.Text(
+              'Pág. ${context.pageNumber} de ${context.pagesCount}',
+              style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 3),
+        pw.Center(
+          child: pw.Text(
+            'Documento generado automáticamente · Sistema de Gestión Integral · Sexta Compañía de Bomberos',
+            style: pw.TextStyle(fontSize: 6, color: PdfColors.grey500),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================
   // REPORTE MENSUAL GENERAL
   // ============================================
 
@@ -133,28 +201,25 @@ class TreasuryReportService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.letter,
           margin: const pw.EdgeInsets.all(40),
-          build: (context) => [
-            // Encabezado
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'SEXTA COMPAÑÍA DE BOMBEROS',
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'REPORTE DE TESORERÍA',
-                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text('Período: ${_getMonthName(month)} $year'),
-                  pw.Text('Fecha de generación: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}'),
-                  pw.Divider(),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeaderWithBranding(
+                title: 'SEXTA COMPAÑÍA DE BOMBEROS',
+                subtitle: 'REPORTE DE TESORERÍA',
+                additionalLines: [
+                  '',
+                  'Período: ${_getMonthName(month)} $year',
+                  if (userId != null && userMap[userId] != null)
+                    'Bombero: ${userMap[userId]!.fullName}',
+                  'Fecha de generación: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
                 ],
               ),
-            ),
+              pw.Divider(),
+            ],
+          ),
+          footer: _buildFooter,
+          build: (context) => [
 
             // Resumen general
             pw.SizedBox(height: 20),
@@ -205,6 +270,18 @@ class TreasuryReportService {
                       ],
                     );
                   }),
+                  // Fila total
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total recaudado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(
+                        _formatCurrency(paidQuotas.fold(0, (sum, q) => sum + q.paidAmount)),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      )),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -241,6 +318,18 @@ class TreasuryReportService {
                       ],
                     );
                   }),
+                  // Fila total
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.red50),
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total adeudado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.red))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(
+                        _formatCurrency(pendingQuotas.fold(0, (sum, q) => sum + q.expectedAmount)),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.red),
+                      )),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -310,28 +399,23 @@ class TreasuryReportService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.letter,
           margin: const pw.EdgeInsets.all(40),
-          build: (context) => [
-            // Encabezado
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'SEXTA COMPAÑÍA DE BOMBEROS',
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'REPORTE INDIVIDUAL DE CUOTAS',
-                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text('Año: $year'),
-                  pw.Text('Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}'),
-                  pw.Divider(),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeaderWithBranding(
+                title: 'SEXTA COMPAÑÍA DE BOMBEROS',
+                subtitle: 'REPORTE INDIVIDUAL DE CUOTAS',
+                additionalLines: [
+                  '',
+                  'Año: $year',
+                  'Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
                 ],
               ),
-            ),
+              pw.Divider(),
+            ],
+          ),
+          footer: _buildFooter,
+          build: (context) => [
 
             // Datos del usuario
             pw.SizedBox(height: 20),
@@ -365,45 +449,64 @@ class TreasuryReportService {
             pw.SizedBox(height: 20),
             pw.Text('DETALLE MENSUAL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
-            pw.Table(
-              border: pw.TableBorder.all(),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(1),
-                3: const pw.FlexColumnWidth(1),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                  children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Mes', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Esperado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Pagado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Estado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                  ],
-                ),
-                ...yearQuotas.map((q) {
-                  return pw.TableRow(
+            () {
+              final paidMonths = yearQuotas.where((q) => q.status == QuotaStatus.paid).length;
+              final totalMonths = yearQuotas.length;
+              final pct = totalMonths > 0 ? (paidMonths * 100 ~/ totalMonths) : 0;
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Table(
+                    border: pw.TableBorder.all(),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(2),
+                      1: const pw.FlexColumnWidth(1),
+                      2: const pw.FlexColumnWidth(1),
+                      3: const pw.FlexColumnWidth(1),
+                    },
                     children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_getMonthName(q.month))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_formatCurrency(q.expectedAmount))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_formatCurrency(q.paidAmount))),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(
-                          q.status == QuotaStatus.paid ? 'Pagado' : 
-                          q.status == QuotaStatus.partial ? 'Parcial' : 'Pendiente',
-                          style: pw.TextStyle(
-                            color: q.status == QuotaStatus.paid ? PdfColors.green : PdfColors.red,
-                          ),
-                        ),
+                      pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                        children: [
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Mes', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Esperado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Pagado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Estado', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                        ],
                       ),
+                      ...yearQuotas.map((q) {
+                        return pw.TableRow(
+                          children: [
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_getMonthName(q.month))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_formatCurrency(q.expectedAmount))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_formatCurrency(q.paidAmount))),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Text(
+                                q.status == QuotaStatus.paid ? 'Pagado' : 
+                                q.status == QuotaStatus.partial ? 'Parcial' : 'Pendiente',
+                                style: pw.TextStyle(
+                                  color: q.status == QuotaStatus.paid ? PdfColors.green : PdfColors.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
                     ],
-                  );
-                }),
-              ],
-            ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    'Cumplimiento anual $year: $paidMonths/$totalMonths meses ($pct%)',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: pct >= 100 ? PdfColors.green700 : pct >= 50 ? PdfColors.orange700 : PdfColors.red700,
+                    ),
+                  ),
+                ],
+              );
+            }(),
           ],
         ),
       );
@@ -451,14 +554,19 @@ class TreasuryReportService {
       for (var user in allUsers) {
         if (user.paymentStartDate == null) continue;
         
-        final debtInfo = await _treasuryService.calculateUserDebt(user.id);
-        final monthsOwed = debtInfo['months_owed'] ?? 0;
+        final accountStatus = await _treasuryService.getUserAccountStatus(user.id);
+        if (accountStatus['success'] != true) continue;
+        final monthsOwed = accountStatus['months_owed'] ?? 0;
         
         if (monthsOwed > 0) {
+          final lastPayment = accountStatus['last_payment'];
           usersWithDebt.add({
             'user': user,
             'months_owed': monthsOwed,
-            'total_amount': debtInfo['total_amount'] ?? 0,
+            'total_amount': accountStatus['total_debt'] ?? 0,
+            'last_payment_date': lastPayment != null
+                ? DateTime.tryParse(lastPayment['date'].toString())
+                : null,
           });
         }
       }
@@ -478,27 +586,22 @@ class TreasuryReportService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.letter,
           margin: const pw.EdgeInsets.all(40),
-          build: (context) => [
-            // Encabezado
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'SEXTA COMPAÑÍA DE BOMBEROS',
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'REPORTE DE MOROSIDAD',
-                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.red),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text('Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}'),
-                  pw.Divider(),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeaderWithBranding(
+                title: 'SEXTA COMPAÑÍA DE BOMBEROS',
+                subtitle: 'REPORTE DE MOROSIDAD',
+                additionalLines: [
+                  '',
+                  'Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
                 ],
               ),
-            ),
+              pw.Divider(),
+            ],
+          ),
+          footer: _buildFooter,
+          build: (context) => [
 
             // Resumen
             pw.SizedBox(height: 20),
@@ -523,6 +626,7 @@ class TreasuryReportService {
                 1: const pw.FlexColumnWidth(2),
                 2: const pw.FlexColumnWidth(1),
                 3: const pw.FlexColumnWidth(1),
+                4: const pw.FlexColumnWidth(1.5),
               },
               children: [
                 pw.TableRow(
@@ -532,16 +636,22 @@ class TreasuryReportService {
                     pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Cargo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
                     pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Meses', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
                     pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Deuda', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Último Pago', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
                   ],
                 ),
                 ...usersWithDebt.map((item) {
                   final user = item['user'] as UserModel;
+                  final lastPay = item['last_payment_date'] as DateTime?;
+                  final lastPayStr = lastPay != null
+                      ? '${lastPay.day}/${lastPay.month}/${lastPay.year}'
+                      : 'Sin pagos';
                   return pw.TableRow(
                     children: [
                       pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(user.fullName)),
                       pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(user.rank)),
                       pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item['months_owed']}')),
                       pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_formatCurrency(item['total_amount'] as int))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(lastPayStr, style: const pw.TextStyle(fontSize: 8))),
                     ],
                   );
                 }),
@@ -593,38 +703,20 @@ class TreasuryReportService {
       final userDataList = <Map<String, dynamic>>[];
       
       for (var user in payingUsers) {
-        final debtInfo = await _treasuryService.calculateUserDebt(user.id);
-        final quotas = await _treasuryService.getUserQuotas(user.id);
-        
-        // Encontrar último pago
-        DateTime? lastPaymentDate;
-        int? lastPaymentAmount;
-        
-        for (var quota in quotas) {
-          if (quota.status == QuotaStatus.paid || quota.status == QuotaStatus.partial) {
-            final payments = await _treasuryService.getQuotaPayments(quota.id);
-            if (payments.isNotEmpty) {
-              payments.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
-              if (lastPaymentDate == null || payments.first.paymentDate.isAfter(lastPaymentDate)) {
-                lastPaymentDate = payments.first.paymentDate;
-                lastPaymentAmount = payments.first.amount;
-              }
-            }
-          }
-        }
-        
-        final monthsSinceStart = debtInfo['months_owed'] != null
-            ? (quotas.where((q) => q.status == QuotaStatus.paid).length + (debtInfo['months_owed'] as int))
-            : 0;
+        final accountStatus = await _treasuryService.getUserAccountStatus(user.id);
+        if (accountStatus['success'] != true) continue;
+        final quotas = (accountStatus['quotas'] as List?) ?? [];
+        final paidCount = quotas.where((q) => q['status'] == 'paid').length;
+        final lastPayment = accountStatus['last_payment'];
         
         userDataList.add({
           'user': user,
-          'months_since_start': monthsSinceStart,
-          'months_paid': quotas.where((q) => q.status == QuotaStatus.paid).length,
-          'months_owed': debtInfo['months_owed'] ?? 0,
-          'total_amount_owed': debtInfo['total_amount'] ?? 0,
-          'last_payment_date': lastPaymentDate,
-          'last_payment_amount': lastPaymentAmount,
+          'months_since_start': quotas.length,
+          'months_paid': paidCount,
+          'months_owed': accountStatus['months_owed'] ?? 0,
+          'total_amount_owed': accountStatus['total_debt'] ?? 0,
+          'last_payment_date': lastPayment != null ? DateTime.tryParse(lastPayment['date'].toString()) : null,
+          'last_payment_amount': lastPayment?['amount'] ?? 0,
         });
       }
       
@@ -639,28 +731,23 @@ class TreasuryReportService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.letter.landscape, // Horizontal para más columnas
           margin: const pw.EdgeInsets.all(30),
-          build: (context) => [
-            // Encabezado
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'SEXTA COMPAÑÍA DE BOMBEROS',
-                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'REPORTE COMPLETO - BASE DE DATOS TESORERÍA',
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Text('Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}'),
-                  pw.Text('Total usuarios con obligación de pago: ${payingUsers.length}'),
-                  pw.Divider(),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeaderWithBranding(
+                title: 'SEXTA COMPAÑÍA DE BOMBEROS',
+                subtitle: 'REPORTE COMPLETO - BASE DE DATOS TESORERÍA',
+                additionalLines: [
+                  '',
+                  'Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                  'Total usuarios con obligación de pago: ${payingUsers.length}',
                 ],
               ),
-            ),
+              pw.Divider(),
+            ],
+          ),
+          footer: _buildFooter,
+          build: (context) => [
 
             // Tabla completa
             pw.SizedBox(height: 15),
@@ -724,7 +811,7 @@ class TreasuryReportService {
               ],
             ),
 
-            // Resumen final
+            // Resumen final por cargo
             pw.SizedBox(height: 15),
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
@@ -735,11 +822,31 @@ class TreasuryReportService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('RESUMEN:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('RESUMEN GENERAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.SizedBox(height: 5),
                   pw.Text('• Usuarios al día: ${userDataList.where((d) => d['months_owed'] == 0).length}'),
                   pw.Text('• Usuarios con deuda: ${userDataList.where((d) => d['months_owed'] > 0).length}'),
                   pw.Text('• Deuda total: ${_formatCurrency(userDataList.fold(0, (sum, d) => sum + (d['total_amount_owed'] as int)))}'),
+                  pw.SizedBox(height: 8),
+                  pw.Text('RESUMEN POR CARGO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 4),
+                  ...() {
+                    // Agrupar por cargo
+                    final Map<String, Map<String, int>> byRank = {};
+                    for (final d in userDataList) {
+                      final rank = (d['user'] as UserModel).rank;
+                      byRank[rank] ??= {'al_dia': 0, 'con_deuda': 0};
+                      if ((d['months_owed'] as int) == 0) {
+                        byRank[rank]!['al_dia'] = byRank[rank]!['al_dia']! + 1;
+                      } else {
+                        byRank[rank]!['con_deuda'] = byRank[rank]!['con_deuda']! + 1;
+                      }
+                    }
+                    return byRank.entries.map((e) => pw.Text(
+                      '  ${e.key}: ${e.value['al_dia']} al día, ${e.value['con_deuda']} con deuda',
+                      style: const pw.TextStyle(fontSize: 9),
+                    )).toList();
+                  }(),
                 ],
               ),
             ),
@@ -836,28 +943,23 @@ class TreasuryReportService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.letter,
           margin: const pw.EdgeInsets.all(40),
-          build: (context) => [
-            // Encabezado
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'SEXTA COMPAÑÍA DE BOMBEROS',
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'REPORTE DE INCONSISTENCIAS EN DATOS',
-                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.orange),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text('Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}'),
-                  pw.Text('Total de problemas detectados: ${issues.length}'),
-                  pw.Divider(),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeaderWithBranding(
+                title: 'SEXTA COMPAÑÍA DE BOMBEROS',
+                subtitle: 'REPORTE DE INCONSISTENCIAS EN DATOS',
+                additionalLines: [
+                  '',
+                  'Fecha: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                  'Total de problemas detectados: ${issues.length}',
                 ],
               ),
-            ),
+              pw.Divider(),
+            ],
+          ),
+          footer: _buildFooter,
+          build: (context) => [
 
             // Resumen por severidad
             pw.SizedBox(height: 20),

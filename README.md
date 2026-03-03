@@ -7,7 +7,7 @@ ERP web para bomberos construido con Flutter, Supabase, y Riverpod.
 - **Frontend:** Flutter Web
 - **Backend:** Supabase (PostgreSQL)
 - **Estado:** Riverpod
-- **Email:** Resend API
+- **Email:** Brevo API (300 emails/día gratuitos)
 - **Gráficos:** fl_chart
 - **PDF:** printing & pdf packages
 
@@ -47,11 +47,11 @@ ERP web para bomberos construido con Flutter, Supabase, y Riverpod.
    - Project URL
    - Anon Key
 
-### 2. API de Email (Resend)
+### 2. API de Email (Brevo)
 
-1. Crear cuenta en https://resend.com
-2. Obtener API Key
-3. Configurar dominio (opcional)
+1. Crear cuenta en https://app.brevo.com/
+2. Obtener API Key desde Settings → SMTP & API → API Keys
+3. Verificar dominio sextacoquimbo.cl
 
 ### 3. Configurar Variables de Entorno
 
@@ -60,7 +60,7 @@ Editar `lib/core/constants/app_constants.dart`:
 ```dart
 static const String supabaseUrl = 'TU_SUPABASE_URL';
 static const String supabaseAnonKey = 'TU_SUPABASE_ANON_KEY';
-static const String resendApiKey = 'TU_RESEND_API_KEY';
+static const String brevoApiKey = 'TU_BREVO_API_KEY';
 ```
 
 O usar variables de entorno al ejecutar:
@@ -69,7 +69,7 @@ O usar variables de entorno al ejecutar:
 flutter run -d chrome \
   --dart-define=SUPABASE_URL=tu_url \
   --dart-define=SUPABASE_ANON_KEY=tu_key \
-  --dart-define=RESEND_API_KEY=tu_resend_key
+  --dart-define=BREVO_API_KEY=tu_brevo_key
 ```
 
 ### 4. Instalar Dependencias
@@ -100,7 +100,7 @@ lib/
 │   └── shift_*.dart
 ├── services/            # Lógica de negocio
 │   ├── supabase_service.dart      # CRUD y queries
-│   ├── email_service.dart         # Resend API
+│   ├── email_service.dart         # Brevo API
 │   ├── attendance_service.dart    # Cross-check licencias
 │   └── shift_service.dart         # Validación cupos 6M/4F
 ├── providers/           # Riverpod providers (TODO)

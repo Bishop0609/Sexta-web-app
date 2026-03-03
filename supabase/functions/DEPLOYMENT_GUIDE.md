@@ -26,18 +26,18 @@ supabase link --project-ref taizxujpxyutpjcworti
 
 ## 🔑 Paso 2: Configurar Variable de Entorno
 
-La Edge Function necesita acceso al `RESEND_API_KEY`. Configúralo en Supabase:
+La Edge Function necesita acceso al `BREVO_API_KEY`. Configúralo en Supabase:
 
 ### Opción A: Via Dashboard Web
 1. Ve a https://supabase.com/dashboard/project/taizxujpxyutpjcworti
 2. Navega a **Settings → Edge Functions → Secrets**
 3. Agrega un nuevo secret:
-   - **Name**: `RESEND_API_KEY`
-   - **Value**: `re_hgBXdLJx_DwFmAgMHNzNMiW96twfiGoqT`
+   - **Name**: `BREVO_API_KEY`
+   - **Value**: `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`
 
 ### Opción B: Via CLI
 ```powershell
-supabase secrets set RESEND_API_KEY=re_hgBXdLJx_DwFmAgMHNzNMiW96twfiGoqT --project-ref taizxujpxyutpjcworti
+supabase secrets set BREVO_API_KEY=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 --project-ref taizxujpxyutpjcworti
 ```
 
 ## 📦 Paso 3: Deploy la Edge Function
@@ -102,7 +102,7 @@ supabase functions logs send-email --project-ref taizxujpxyutpjcworti
 - Verifica que la función esté deployada: `supabase functions list --project-ref taizxujpxyutpjcworti`
 - Re-deploy: `supabase functions deploy send-email --project-ref taizxujpxyutpjcworti`
 
-### Error: "RESEND_API_KEY not found"
+### Error: "BREVO_API_KEY not found"
 - Verifica los secrets: `supabase secrets list --project-ref taizxujpxyutpjcworti`
 - Vuelve a configurar el secret como se indicó en Paso 2
 
@@ -112,14 +112,14 @@ supabase functions logs send-email --project-ref taizxujpxyutpjcworti
 
 ### Los emails no llegan
 - Verifica los logs: `supabase functions logs send-email`
-- Revisa que el API key de Resend sea válido
-- Verifica que el dominio `notificaciones@sextacoquimbo.cl` esté verificado en Resend
+- Revisa que el API key de Brevo sea válido
+- Verifica que el dominio `notificaciones@sextacoquimbo.cl` esté verificado en Brevo
 
 ## 📝 Notas Importantes
 
 1. **CORS**: La Edge Function ya tiene CORS configurado para permitir llamadas desde tu app web
 2. **Autenticación**: La función valida el JWT de Supabase automáticamente
-3. **Rate Limiting**: Resend tiene límites de envío. En el plan gratuito: 100 emails/día
+3. **Rate Limiting**: Brevo tiene límites de envío. En el plan gratuito: 300 emails/día
 
 ## 🔄 Actualizar la Función
 

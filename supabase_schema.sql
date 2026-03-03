@@ -105,6 +105,7 @@ CREATE TABLE permissions (
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   reason TEXT NOT NULL,
+  attachment_path TEXT,
   status VARCHAR(20) CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
   reviewed_by UUID REFERENCES users(id),
   reviewed_at TIMESTAMP WITH TIME ZONE,
@@ -438,6 +439,7 @@ EXECUTE FUNCTION validate_shift_quota();
 COMMENT ON TABLE users IS 'Bomberos del sistema con roles de acceso';
 COMMENT ON TABLE act_types IS 'Tipos de actos con clasificación Efectiva/Abono';
 COMMENT ON TABLE permissions IS 'Solicitudes de permisos (licencias)';
+COMMENT ON COLUMN permissions.attachment_path IS 'Ruta en Storage del archivo adjunto opcional (PDF o imagen)';
 COMMENT ON TABLE attendance_events IS 'Eventos donde se toma asistencia';
 COMMENT ON TABLE attendance_records IS 'Registros individuales de asistencia';
 COMMENT ON TABLE shift_configurations IS 'Configuración de períodos de guardia';

@@ -3,13 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sexta_app/core/constants/app_constants.dart';
 
-/// Service for sending emails via Resend API
+/// Service for sending emails via Brevo API (formerly Sendinblue)
 class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
   EmailService._internal();
 
-  static const String _baseUrl = 'https://api.resend.com/emails';
+  static const String _baseUrl = 'https://api.brevo.com/v3/smtp/email';
   final _supabase = Supabase.instance.client;
 
   /// Send email via Supabase Edge Function (solves CORS issues)
@@ -52,21 +52,25 @@ class EmailService {
   }) async {
     try {
       print('📤 Intentando enviar email a: $to');
-      print('   From: ${AppConstants.resendFromEmail}');
+      print('   From: ${AppConstants.brevoFromEmail}');
       print('   Subject: $subject');
-      print('   API Key: ${AppConstants.resendApiKey.substring(0, 10)}...');
+      print('   API Key: ${AppConstants.brevoApiKey.substring(0, 10)}...');
       
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
-          'Authorization': 'Bearer ${AppConstants.resendApiKey}',
+          'api-key': AppConstants.brevoApiKey,
           'Content-Type': 'application/json',
+          'accept': 'application/json',
         },
         body: jsonEncode({
-          'from': AppConstants.resendFromEmail,
-          'to': [to],
+          'sender': {
+            'email': AppConstants.brevoFromEmail,
+            'name': 'SGI Sexta Compañía',
+          },
+          'to': [{'email': to}],
           'subject': subject,
-          'html': htmlContent,
+          'htmlContent': htmlContent,
         }),
       );
 
@@ -259,7 +263,7 @@ Future<bool> sendWelcomeEmail({
       return false;
     }
 
-    // Usar Edge Function en lugar de llamada directa a Resend
+    // Usar Edge Function en lugar de llamada directa a Brevo
     return await _sendViaEdgeFunction(
       emailType: 'activity_created',
       data: {
@@ -381,6 +385,38 @@ Future<bool> sendWelcomeEmail({
     );
   }
 
+  /// Notifica apertura de período de inscripción
+  Future<bool> sendGuardRegistrationOpenedNotification({
+     required List<String> recipientEmails,
+     required String periodStart,
+     required String periodEnd,
+   }) async {
+    return await _sendViaEdgeFunction(
+      emailType: 'guard_registration_opened',
+      data: {
+        'recipientEmails': recipientEmails,
+        'periodStart': periodStart,
+        'periodEnd': periodEnd,
+      },
+    );
+  }
+
+  /// Notifica cierre de período de inscripción
+  Future<bool> sendGuardRegistrationClosedNotification({
+     required List<String> recipientEmails,
+     required String periodStart,
+     required String periodEnd,
+   }) async {
+    return await _sendViaEdgeFunction(
+      emailType: 'guard_registration_closed',
+      data: {
+        'recipientEmails': recipientEmails,
+        'periodStart': periodStart,
+        'periodEnd': periodEnd,
+      },
+    );
+  }
+
   // =====================================================
   // MÓDULO TESORERÍA
   // =====================================================
@@ -445,46 +481,16 @@ Future<bool> sendWelcomeEmail({
     required String month,
     required int year,
   }) async {
-    final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background-color: #2E7D32; color: white; padding: 20px; text-align: center; }
-    .content { background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; }
-    .success { background-color: #E8F5E9; padding: 15px; border-left: 4px solid #2E7D32; margin: 15px 0; }
-    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>✅ Pago Registrado</h1>
-    </div>
-    <div class="content">
-      <p>Estimado/a $userName,</p>
-      <div class="success">
-        <p><strong>Se ha registrado tu pago exitosamente</strong></p>
-        <p><strong>Monto:</strong> \$$paidAmount</p>
-        <p><strong>Fecha:</strong> $paymentDate</p>
-        <p><strong>Período:</strong> $month $year</p>
-      </div>
-      <p>Gracias por tu puntualidad.</p>
-    </div>
-    <div class="footer">
-      <p>Sistema de Gestión Integral - Sexta Compañía</p>
-    </div>
-  </div>
-</body>
-</html>
-''';
-
-    return await _sendEmail(
-      to: userEmail,
-      subject: 'Pago Registrado - $month $year',
-      htmlContent: htmlContent,
+    return await _sendViaEdgeFunction(
+      emailType: 'payment_confirmation',
+      data: {
+        'userEmail': userEmail,
+        'userName': userName,
+        'paidAmount': paidAmount,
+        'paymentDate': paymentDate,
+        'month': month,
+        'year': year,
+      },
     );
   }
 
@@ -535,6 +541,37 @@ Future<bool> sendWelcomeEmail({
       to: userEmail,
       subject: 'Recordatorio: Cuota Pendiente $month $year',
       htmlContent: htmlContent,
+    );
+  }
+
+  // =====================================================
+  // MÓDULO ASISTENCIAS
+  // =====================================================
+
+  /// Notifica a ayudantía sobre nueva asistencia registrada
+  Future<bool> sendAttendanceCreatedNotification({
+    required String eventDate,
+    required String actType,
+    required String subtype,
+    required String location,
+    required String createdBy,
+    required int totalPresent,
+    required int totalAbsent,
+    required int totalLicencia,
+  }) async {
+    return await _sendViaEdgeFunction(
+      emailType: 'attendance_created',
+      data: {
+        'ayudantiaEmail': 'ayudantia@sextacoquimbo.cl',
+        'eventDate': eventDate,
+        'actType': actType,
+        'subtype': subtype,
+        'location': location,
+        'createdBy': createdBy,
+        'totalPresent': totalPresent,
+        'totalAbsent': totalAbsent,
+        'totalLicencia': totalLicencia,
+      },
     );
   }
 }

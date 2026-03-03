@@ -73,89 +73,132 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   void _showCreateUserDialog() {
     final authService = AuthService();
-    final emailService = EmailService();
+    final parentContext = context; // Save parent context reference
     
     showDialog(
       context: context,
-      builder: (context) => _UserFormDialog(
+      builder: (_) => _UserFormDialog(
         onSave: (user) async {
-          // Use fixed default password "Bombero2024!"
-          const tempPassword = 'Bombero2024!';
-          
-          // Create user in database
-          await _supabase.createUser(user);
-          
-          // Get the created user to obtain the generated ID
-          final createdUser = await _supabase.getUserByRut(user.rut);
-          
-          if (createdUser != null) {
-            // Create auth credentials with hashed password
-            final passwordHash = authService.hashPassword(tempPassword);
-            await _supabase.createAuthCredentials(createdUser.id, passwordHash);
+          // Show loading using PARENT context
+          showDialog(
+            context: parentContext,
+            barrierDismissible: false,
+            builder: (_) => const Center(child: CircularProgressIndicator()),
+          );
+
+          try {
+            await _supabase.createUser(user);
             
-            // Send welcome email (email is now required)
-            await emailService.sendWelcomeEmail(
-              userEmail: user.email!,
-              fullName: user.fullName,
-              rut: user.rut,
-              tempPassword: tempPassword,
-            );
+            final createdUser = await _supabase.getUserByRut(user.rut);
             
-            // Show temp password to admin (backup delivery)
-            if (mounted) {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Usuario Creado'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Usuario creado exitosamente.'),
-                      const SizedBox(height: 16),
-                      const Text('Contraseña temporal:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+            if (createdUser == null) {
+              Navigator.of(parentContext).pop(); // Close loading
+              _showErrorDialog('Error al crear usuario en la base de datos');
+              return;
+            }
+            
+            final resetResult = await authService.resetUserPassword(createdUser.id);
+            
+            if (!resetResult.success || resetResult.temporaryPassword == null) {
+              await _supabase.deleteUser(createdUser.id);
+              Navigator.of(parentContext).pop(); // Close loading
+              _showErrorDialog('Error credenciales: ${resetResult.error ?? "Error desconocido"}');
+              return;
+            }
+            
+            // Success!
+            Navigator.of(parentContext).pop(); // Close loading
+            
+            showDialog(
+              context: parentContext,
+              builder: (ctx) => AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green[600]),
+                    const SizedBox(width: 8),
+                    const Text('Usuario Creado'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Usuario creado exitosamente.'),
+                    const SizedBox(height: 16),
+                    const Text('Contraseña temporal:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: SelectableText(
-                          tempPassword,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      child: SelectableText(
+                        resetResult.temporaryPassword!,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '✉️ Email enviado a: ${user.email}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                   ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cerrar'),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Email: ${user.email}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'El usuario deberá cambiarla en su primer login.',
+                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
                     ),
                   ],
                 ),
-              );
-              
-              // Refresh user list after showing password dialog
-              await _loadUsers();
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cerrar'),
+                  ),
+                ],
+              ),
+            );
+            
+            await _loadUsers();
+            
+          } catch (e) {
+            Navigator.of(parentContext).pop(); // Close loading
+            
+            String errorMsg = 'Error inesperado: $e';
+            if (e.toString().contains('23505') || e.toString().contains('duplicate')) {
+              errorMsg = 'Ya existe un usuario con ese RUT.';
             }
+            _showErrorDialog(errorMsg);
           }
         },
+      ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error, color: AppTheme.criticalColor),
+            const SizedBox(width: 8),
+            const Text('Error'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CERRAR'),
+          ),
+        ],
       ),
     );
   }
@@ -526,76 +569,98 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           style: TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                       )
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SingleChildScrollView(
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('RUT')),
-                              DataColumn(label: Text('Nombre')),
-                              DataColumn(label: Text('Cargo')),
-                              DataColumn(label: Text('Email')),
-                              DataColumn(label: Text('Género')),
-                              DataColumn(label: Text('Estado Civil')),
-                              DataColumn(label: Text('Acciones')),
-                            ],
-                            rows: _filteredUsers.map((user) {
-                              return DataRow(cells: [
-                                DataCell(Text(user.rut)),
-                                DataCell(Text(user.fullName)),
-                                DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _getRankColor(user.rank).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      user.rank,
-                                      style: TextStyle(
-                                        color: _getRankColor(user.rank),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(Text(user.email ?? '-')),
-                                DataCell(Text(user.gender == Gender.male ? 'Masculino' : 'Femenino')),
-                                DataCell(Text(user.maritalStatus == MaritalStatus.single ? 'Soltero' : 'Casado')),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, size: 20),
-                                        onPressed: () => _showEditUserDialog(user),
-                                        tooltip: 'Editar',
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.lock_reset, size: 20),
-                                        color: Colors.orange[700],
-                                        onPressed: () => _showResetPasswordDialog(user),
-                                        tooltip: 'Resetear Contraseña',
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          size: 20,
-                                          color: AppTheme.criticalColor,
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Definir columnas visibles según ancho disponible
+                          final width = constraints.maxWidth;
+                          final showGenderMarital = width > 1100;
+                          final showEmail = width > 900;
+                          final showCargo = width > 600;
+
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: SizedBox(
+                              width: width, // Forzar ancho completo
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown, // Escalar hacia abajo para ajustar si es necesario
+                                alignment: Alignment.topCenter,
+                                child: DataTable(
+                                  columnSpacing: 20, // Reducir espaciado para aprovechar espacio
+                                  columns: [
+                                    const DataColumn(label: Text('RUT')),
+                                    const DataColumn(label: Text('Nombre')),
+                                    if (showCargo) const DataColumn(label: Text('Cargo')),
+                                    if (showEmail) const DataColumn(label: Text('Email')),
+                                    if (showGenderMarital) const DataColumn(label: Text('Género')),
+                                    if (showGenderMarital) const DataColumn(label: Text('Estado Civil')),
+                                    const DataColumn(label: Text('Acciones')),
+                                  ],
+                                  rows: _filteredUsers.map((user) {
+                                    return DataRow(cells: [
+                                      DataCell(Text(user.rut)),
+                                      DataCell(ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 200),
+                                        child: Text(user.fullName, overflow: TextOverflow.ellipsis),
+                                      )),
+                                      if (showCargo) DataCell(
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _getRankColor(user.rank).withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            user.rank,
+                                            style: TextStyle(
+                                              color: _getRankColor(user.rank),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
-                                        onPressed: () => _showDeleteConfirmation(user),
-                                        tooltip: 'Eliminar',
                                       ),
-                                    ],
-                                  ),
+                                      if (showEmail) DataCell(ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 180),
+                                        child: Text(user.email ?? '-', overflow: TextOverflow.ellipsis),
+                                      )),
+                                      if (showGenderMarital) DataCell(Text(user.gender == Gender.male ? 'Masculino' : 'Femenino')),
+                                      if (showGenderMarital) DataCell(Text(user.maritalStatus == MaritalStatus.single ? 'Soltero' : 'Casado')),
+                                      DataCell(
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.edit, size: 20),
+                                              onPressed: () => _showEditUserDialog(user),
+                                              tooltip: 'Editar',
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.lock_reset, size: 20),
+                                              color: Colors.orange[700],
+                                              onPressed: () => _showResetPasswordDialog(user),
+                                              tooltip: 'Resetear Contraseña',
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                size: 20,
+                                                color: AppTheme.criticalColor,
+                                              ),
+                                              onPressed: () => _showDeleteConfirmation(user),
+                                              tooltip: 'Eliminar',
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ]);
+                                  }).toList(),
                                 ),
-                              ]);
-                            }).toList(),
-                          ),
-                        ),
+                              ),
+                            ),
+                          );
+                        }
                       ),
           ),
         ],
@@ -640,17 +705,12 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   final _victorNumberController = TextEditingController(); // Nuevo
   final _registroCompaniaController = TextEditingController(); // Nuevo
   
-  String _selectedRank = 'Bombero(a)'; // Cambiado a cargo que existe en nueva lista
+  String _selectedRank = 'Bombero'; // Cambiado a cargo que existe en nueva lista
   Gender _selectedGender = Gender.male;
   MaritalStatus _selectedMaritalStatus = MaritalStatus.single;
   UserRole _selectedRole = UserRole.bombero; // Default role
   bool _isSaving = false;
   
-  // Variables de tesorería
-  bool _isStudent = false;
-  DateTime? _studentStartDate;
-  DateTime? _studentEndDate;
-  DateTime? _paymentStartDate;
 
   // Cargos predefinidos por categoría
   final Map<String, List<String>> _cargoCategories = {
@@ -771,7 +831,6 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     setState(() => _isSaving = true);
 
     try {
-      // Usar toJson para convertir correctamente los enums
       final userMap = {
         'rut': _rutController.text.trim(),
         'victor_number': _victorNumberController.text.trim(),
@@ -779,45 +838,36 @@ class _UserFormDialogState extends State<_UserFormDialog> {
             ? null 
             : _registroCompaniaController.text.trim(),
         'full_name': _nameController.text.trim(),
-        'email': _emailController.text.trim(), // Email is now required
+        'email': _emailController.text.trim(),
         'rank': _selectedRank,
-        'role': _selectedRole.name, // Usar el rol seleccionado
+        'role': _selectedRole.name,
         'gender': _selectedGender == Gender.male ? 'M' : 'F',
         'marital_status': _selectedMaritalStatus == MaritalStatus.single ? 'single' : 'married',
       };
 
-      // Agregar id solo si estamos editando, sino usar string vacío temporal
       if (widget.user != null) {
         userMap['id'] = widget.user!.id;
       } else {
-        userMap['id'] = ''; // Temporal, se eliminará antes de insert
+        userMap['id'] = '';
       }
 
       final user = UserModel.fromJson(userMap);
       
-      // Close this dialog first (Fix #1: Modal stuck issue)
+      // Close dialog THEN call onSave
+      // Important: save onSave reference before popping
+      final onSave = widget.onSave;
       if (mounted) {
         Navigator.of(context).pop();
       }
       
-      // Then call onSave which will show the password dialog
-      await widget.onSave(user);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.user == null
-                  ? 'Usuario creado exitosamente'
-                  : 'Usuario actualizado exitosamente',
-            ),
-            backgroundColor: AppTheme.efectivaColor,
-          ),
-        );
-      }
+      // Call onSave AFTER dialog is closed
+      // This runs in parent context, not in this disposed widget
+      await onSave(user);
+      
     } catch (e) {
-      setState(() => _isSaving = false);
+      // Only update state if still mounted
       if (mounted) {
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
@@ -971,85 +1021,37 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     helperText: 'Define qué módulos puede acceder',
                   ),
                   items: const [
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.admin,
-                      child: Row(
-                        children: [
-                          Icon(Icons.admin_panel_settings, size: 20, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Administrador'),
-                        ],
-                      ),
+                      child: Text('Administrador'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial1,
-                      child: Row(
-                        children: [
-                          Icon(Icons.military_tech, size: 20, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text('Oficial 1: Capitan y Tte 1'),
-                        ],
-                      ),
+                      child: Text('Oficial 1 - Capitán y Tte 1'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial2,
-                      child: Row(
-                        children: [
-                          Icon(Icons.event, size: 20, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text('Oficial 2: Solo gestion de actividades'),
-                        ],
-                      ),
+                      child: Text('Oficial 2 - Gestión Actividades'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial3,
-                      child: Row(
-                        children: [
-                          Icon(Icons.support_agent, size: 20, color: Colors.orange),
-                          SizedBox(width: 8),
-                          Text('Oficial 3: Ayudantes'),
-                        ],
-                      ),
+                      child: Text('Oficial 3 - Ayudante'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial4,
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag, size: 20, color: Colors.purple),
-                          SizedBox(width: 8),
-                          Text('Oficial 4: Teniente a cargo de EPP'),
-                        ],
-                      ),
+                      child: Text('Oficial 4 - Teniente a cargo de EPP'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial5,
-                      child: Row(
-                        children: [
-                          Icon(Icons.settings_applications, size: 20, color: Colors.teal),
-                          SizedBox(width: 8),
-                          Text('Oficial 5: Solo administracion de EPP'),
-                        ],
-                      ),
+                      child: Text('Oficial 5 - Solo administración de EPP'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.oficial6,
-                      child: Row(
-                        children: [
-                          Icon(Icons.account_balance_wallet, size: 20, color: Colors.indigo),
-                          SizedBox(width: 8),
-                          Text('Oficial 6: Tesorero'),
-                        ],
-                      ),
+                      child: Text('Oficial 6 - Tesorero'),
                     ),
-                    DropdownMenuItem<UserRole>(
+                    DropdownMenuItem(
                       value: UserRole.bombero,
-                      child: Row(
-                        children: [
-                          Icon(Icons.person, size: 20, color: Colors.grey),
-                          SizedBox(width: 8),
-                          Text('Bombero'),
-                        ],
-                      ),
+                      child: Text('Bombero'),
                     ),
                   ],
                   onChanged: (value) {
@@ -1124,135 +1126,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 24),
-                
-                // Sección de Tesorería
-                const Text(
-                  'Información de Tesorería',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                
-                // Checkbox: Es estudiante
-                CheckboxListTile(
-                  title: const Text('Es estudiante'),
-                  subtitle: const Text('Paga cuota reducida'),
-                  value: _isStudent,
-                  onChanged: (value) {
-                    setState(() {
-                      _isStudent = value ?? false;
-                      // Si desmarca estudiante, limpiar fechas de estudiante
-                      if (!_isStudent) {
-                        _studentStartDate = null;
-                        _studentEndDate = null;
-                      }
-                    });
-                  },
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                const SizedBox(height: 12),
-                
-                // Fechas de estudiante (solo si isStudent es true)
-                if (_isStudent) ...[
-                  // Fecha de inicio de periodo estudiante
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _studentStartDate ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          _studentStartDate = picked;
-                          // Si la fecha de fin es antes que la de inicio, limpiarla
-                          if (_studentEndDate != null && _studentEndDate!.isBefore(picked)) {
-                            _studentEndDate = null;
-                          }
-                        });
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Inicio período estudiante',
-                        hintText: 'Fecha de inicio como estudiante',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.calendar_today),
-                      ),
-                      child: Text(
-                        _studentStartDate != null
-                            ? '${_studentStartDate!.day}/${_studentStartDate!.month}/${_studentStartDate!.year}'
-                            : 'No especificado',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Fecha de fin de periodo estudiante  
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _studentEndDate ?? (_studentStartDate ?? DateTime.now()),
-                        firstDate: _studentStartDate ?? DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (picked != null) setState(() => _studentEndDate = picked);
-                    },
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'Fin período estudiante (opcional)',
-                        hintText: 'Dejar vacío si actualmente es estudiante',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_studentEndDate != null)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 20),
-                                onPressed: () => setState(() => _studentEndDate = null),
-                                tooltip: 'Limpiar fecha',
-                              ),
-                            const Icon(Icons.calendar_today),
-                            const SizedBox(width: 8),
-                          ],
-                        ),
-                      ),
-                      child: Text(
-                        _studentEndDate != null
-                            ? '${_studentEndDate!.day}/${_studentEndDate!.month}/${_studentEndDate!.year}'
-                            : 'Actualmente estudiante',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                
-                // Fecha de inicio de pagos
-                InkWell(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _paymentStartDate ?? DateTime.now(),
-                      firstDate: DateTime(2025),
-                      lastDate: DateTime(2030),
-                    );
-                    if (picked != null) setState(() => _paymentStartDate = picked);
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Fecha inicio pagos',
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.calendar_today),
-                    ),
-                    child: Text(
-                      _paymentStartDate != null
-                          ? '${_paymentStartDate!.day}/${_paymentStartDate!.month}/${_paymentStartDate!.year}'
-                          : 'No paga cuotas',
-                    ),
-                  ),
-                ),
+
               ],
             ),
           ),

@@ -54,10 +54,17 @@ class ReportFilters extends StatelessWidget {
               runSpacing: 16,
               children: [
                 if (showUserFilter)
-                  SizedBox(
-                    width: 300,
-                    child: DropdownButtonFormField<String>(
-                      value: selectedUserId,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Calcular ancho disponible para hacerlo responsive
+                      final availableWidth = constraints.maxWidth;
+                      final dropdownWidth = availableWidth > 600 ? 300.0 : availableWidth;
+                      
+                      return SizedBox(
+                        width: dropdownWidth,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true, // Para evitar overflow de texto interno
+                          value: selectedUserId,
                       decoration: const InputDecoration(
                         labelText: 'Usuario',
                         border: OutlineInputBorder(),
@@ -75,7 +82,9 @@ class ReportFilters extends StatelessWidget {
                       ],
                       onChanged: onUserChanged,
                     ),
-                  ),
+                  );
+                },
+              ),
                 if (showDateFilter) ...[
                   SizedBox(
                     width: 200,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sexta_app/core/constants/app_constants.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
+import 'package:sexta_app/core/theme/custom_scroll_behavior.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/screens/auth/change_password_screen.dart';
 
@@ -26,6 +27,17 @@ import 'package:sexta_app/screens/activities/manage_activities_screen.dart';
 import 'package:sexta_app/screens/epp/epp_management_screen.dart';
 import 'package:sexta_app/screens/dashboard/company_dashboard_screen.dart';
 import 'package:sexta_app/screens/treasury/treasury_management_screen.dart';
+import 'package:sexta_app/screens/guards/guard_fds_attendance_screen.dart';
+import 'package:sexta_app/screens/guards/guard_diurna_attendance_screen.dart';
+import 'package:sexta_app/screens/guards/guard_nocturna_attendance_screen.dart';
+import 'package:sexta_app/screens/guards/manage_guard_attendance_screen.dart';
+import 'package:sexta_app/screens/guards/guard_availability_screen.dart';
+import 'package:sexta_app/screens/guards/view_guard_roster_screen.dart';
+import 'package:sexta_app/screens/guards/generate_guard_roster_screen.dart';
+import 'package:sexta_app/screens/guards/guard_registration_period_screen.dart';
+
+import 'package:sexta_app/screens/admin/maintenance_screen.dart';
+import 'package:sexta_app/screens/admin/holidays_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +62,7 @@ class SextaApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'Sistema Sexta Compañía',
       theme: AppTheme.theme,
+      scrollBehavior: const CustomScrollBehavior(),
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
       // Configuración de idioma español
@@ -143,6 +156,46 @@ final _router = GoRouter(
     GoRoute(
       path: '/treasury',
       builder: (context, state) => const TreasuryManagementScreen(),
+    ),
+    GoRoute(
+      path: '/maintenance',
+      builder: (context, state) => const MaintenanceScreen(),
+    ),
+    GoRoute(
+      path: '/guard-fds',
+      builder: (context, state) => const GuardFdsAttendanceScreen(),
+    ),
+    GoRoute(
+      path: '/guard-diurna',
+      builder: (context, state) => const GuardDiurnaAttendanceScreen(),
+    ),
+    GoRoute(
+      path: '/guard-nocturna',
+      builder: (context, state) => const GuardNocturnaAttendanceScreen(),
+    ),
+    GoRoute(
+      path: '/manage-guard-attendance',
+      builder: (context, state) => const ManageGuardAttendanceScreen(),
+    ),
+    GoRoute(
+      path: '/guard-availability',
+      builder: (context, state) => const GuardAvailabilityScreen(),
+    ),
+    GoRoute(
+      path: '/view-guard-roster',
+      builder: (context, state) => const ViewGuardRosterScreen(),
+    ),
+    GoRoute(
+      path: '/generate-guard-roster',
+      builder: (context, state) => const GenerateGuardRosterScreen(),
+    ),
+    GoRoute(
+      path: '/guard-registration-periods',
+      builder: (context, state) => const GuardRegistrationPeriodScreen(),
+    ),
+    GoRoute(
+      path: '/holidays',
+      builder: (context, state) => const HolidaysScreen(),
     ),
   ],
 );

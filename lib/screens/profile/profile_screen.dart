@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
+
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/widgets/app_drawer.dart';
 import 'package:sexta_app/widgets/branded_app_bar.dart';
@@ -28,7 +28,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isLoading = true;
   UserModel? _user;
-  Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _attendanceHistory = [];
   List<Map<String, dynamic>> _permissions = [];
   List<EPPAssignmentModel> _eppAssignments = [];
@@ -52,7 +51,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Load all profile data in parallel
       final results = await Future.wait([
         _supabase.getUserProfile(userId),
-        _attendanceService.calculateIndividualStats(userId),
         _attendanceService.getUserAttendanceHistory(userId, 20),
         _supabase.getPermissionsByUser(userId),
         _eppService.getActiveEPPByUser(userId),
@@ -60,10 +58,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() {
         _user = results[0] as UserModel?;
-        _stats = results[1] as Map<String, dynamic>;
-        _attendanceHistory = results[2] as List<Map<String, dynamic>>;
-        _permissions = results[3] as List<Map<String, dynamic>>;
-        _eppAssignments = results[4] as List<EPPAssignmentModel>;
+        _attendanceHistory = results[1] as List<Map<String, dynamic>>;
+        _permissions = results[2] as List<Map<String, dynamic>>;
+        _eppAssignments = results[3] as List<EPPAssignmentModel>;
         _isLoading = false;
       });
     } catch (e) {
@@ -97,8 +94,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (_user != null)
                     const SizedBox(height: 16),
                   _buildEPPCard(),
-                  const SizedBox(height: 16),
-                  _buildStatsCard(),
                   const SizedBox(height: 16),
                   _buildAttendanceHistoryCard(),
                   const SizedBox(height: 16),
@@ -280,107 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _buildStatsCard() {
-    if (_stats == null) return const SizedBox();
 
-    final efectivaPct = _stats!['efectiva_pct'] as double;
-    final abonoPct = _stats!['abono_pct'] as double;
-    final total = _stats!['total'] as int;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.bar_chart, color: AppTheme.navyBlue),
-                const SizedBox(width: 8),
-                Text(
-                  'Mis Estadísticas',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                SizedBox(
-                  width: 150,
-                  height: 150,
-                  child: PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          value: efectivaPct,
-                          color: AppTheme.efectivaColor,
-                          title: '${efectivaPct.toStringAsFixed(1)}%',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          radius: 60,
-                        ),
-                        PieChartSectionData(
-                          value: abonoPct,
-                          color: AppTheme.abonoColor,
-                          title: '${abonoPct.toStringAsFixed(1)}%',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          radius: 60,
-                        ),
-                      ],
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 32),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStatItem('Lista Efectiva', _stats!['efectiva_count'] as int, AppTheme.efectivaColor),
-                      const SizedBox(height: 12),
-                      _buildStatItem('Abonos', _stats!['abono_count'] as int, AppTheme.abonoColor),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Total de asistencias: $total',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, int count, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$label: $count',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-      ],
-    );
-  }
 
   Widget _buildAttendanceHistoryCard() {
     return Card(

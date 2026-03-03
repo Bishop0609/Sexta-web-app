@@ -5,224 +5,259 @@ import 'package:intl/intl.dart';
 
 /// Servicio para generación de reportes PDF
 class PdfService {
-  /// Genera reporte PDF de permisos aprobados entre fechas
+  /// Genera reporte PDF de permisos entre fechas
+  /// [statusFilter]: 'approved' | 'rejected' | 'all'
   Future<void> generatePermissionsReport({
     required List<Map<String, dynamic>> permissions,
     required DateTime startDate,
     required DateTime endDate,
-    String? firefighterName, // Opcional: nombre del bombero filtrado
+    String? firefighterName,
+    String statusFilter = 'approved',
   }) async {
     final pdf = pw.Document();
-    
+
     final dateFormat = DateFormat('dd/MM/yyyy');
     final startStr = dateFormat.format(startDate);
     final endStr = dateFormat.format(endDate);
+    final generatedStr = dateFormat.format(DateTime.now());
+
+    final String statusLabel = statusFilter == 'approved'
+        ? 'Aprobados'
+        : statusFilter == 'rejected'
+            ? 'Rechazados'
+            : 'Aprobados y Rechazados';
+
+    final String emptyMsg = statusFilter == 'all'
+        ? 'No se encontraron permisos en el rango de fechas seleccionado.'
+        : 'No se encontraron permisos $statusLabel en el rango de fechas seleccionado.';
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
-        build: (context) {
-          return [
-            // Título principal
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Sexta Compañía',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    'Sistema de Gestión Integral',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.normal,
-                    ),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text(
-                    'Permisos entre fechas $startStr y $endStr',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  if (firefighterName != null) ...[
-                    pw.SizedBox(height: 4),
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.fromLTRB(40, 40, 40, 40),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
                     pw.Text(
-                      'Bombero: $firefighterName',
+                      'SEXTA COMPAÑÍA DE BOMBEROS',
                       style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
                       ),
                     ),
-                  ] else ...[
+                    pw.Text(
+                      'REPORTE DE PERMISOS',
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      'Todos los bomberos',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.normal,
-                      ),
+                      'Período: $startStr - $endStr',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      'Bombero: ${firefighterName ?? 'Todos'}  |  Estado: $statusLabel',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      'Fecha de generación: $generatedStr',
+                      style: const pw.TextStyle(fontSize: 10),
                     ),
                   ],
-                ],
-              ),
+                ),
+                pw.Text(
+                  'Desarrollado por\nGuntherSOFT, 2026',
+                  style: const pw.TextStyle(fontSize: 8),
+                  textAlign: pw.TextAlign.right,
+                ),
+              ],
             ),
-            pw.SizedBox(height: 20),
-            pw.Divider(thickness: 2),
-            pw.SizedBox(height: 20),
-
-            // Verificar si hay permisos
-            if (permissions.isEmpty)
+            pw.SizedBox(height: 6),
+            pw.Divider(thickness: 1.5),
+            pw.SizedBox(height: 8),
+          ],
+        ),
+        build: (context) {
+          if (permissions.isEmpty) {
+            return [
               pw.Center(
                 child: pw.Text(
-                  'No se encontraron permisos aprobados en el rango de fechas seleccionado.',
+                  emptyMsg,
                   style: pw.TextStyle(
                     fontSize: 12,
                     fontStyle: pw.FontStyle.italic,
                   ),
                 ),
-              )
-            else
-              // Lista de permisos
-              ...permissions.map((permission) {
-                final user = permission['user'] as Map<String, dynamic>;
-                final firefighterName = user['full_name'] as String;
-                final reason = permission['reason'] as String;
-                final permStartDate = DateTime.parse(permission['start_date']);
-                final permEndDate = DateTime.parse(permission['end_date']);
-                final daysRequested = permEndDate.difference(permStartDate).inDays + 1;
+              ),
+            ];
+          }
 
-                return pw.Container(
-                  margin: const pw.EdgeInsets.only(bottom: 15),
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey400),
-                    borderRadius: pw.BorderRadius.circular(4),
-                  ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+          return permissions.map((permission) {
+            final user = permission['user'] as Map<String, dynamic>;
+            final name = user['full_name'] as String;
+            final rank = user['rank'] as String? ?? '';
+            final reason = permission['reason'] as String;
+            final permStatus = permission['status'] as String;
+            final rejectionReason = permission['rejection_reason'] as String?;
+            final permStartDate = DateTime.parse(permission['start_date']);
+            final permEndDate = DateTime.parse(permission['end_date']);
+            final daysRequested =
+                permEndDate.difference(permStartDate).inDays + 1;
+
+            final bool isRejected = permStatus == 'rejected';
+
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(
+                  color: isRejected ? PdfColors.red300 : PdfColors.grey400,
+                ),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  // Nombre + estado
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      // Nombre del bombero
-                      pw.Text(
-                        firefighterName,
-                        style: pw.TextStyle(
-                          fontSize: 13,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.SizedBox(height: 6),
-                      
-                      // Motivo
-                      pw.Row(
+                      pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.SizedBox(
-                            width: 80,
-                            child: pw.Text(
-                              'Motivo:',
-                              style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                              ),
+                          pw.Text(
+                            name,
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
                             ),
                           ),
-                          pw.Expanded(
-                            child: pw.Text(
-                              reason,
-                              style: const pw.TextStyle(fontSize: 11),
+                          if (rank.isNotEmpty)
+                            pw.Text(
+                              rank,
+                              style: const pw.TextStyle(fontSize: 10),
                             ),
-                          ),
                         ],
                       ),
-                      pw.SizedBox(height: 4),
-                      
-                      // Período
-                      pw.Row(
-                        children: [
-                          pw.SizedBox(
-                            width: 80,
-                            child: pw.Text(
-                              'Período:',
-                              style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                              ),
-                            ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: pw.BoxDecoration(
+                          color: isRejected
+                              ? PdfColors.red100
+                              : PdfColors.green100,
+                          borderRadius: pw.BorderRadius.circular(4),
+                        ),
+                        child: pw.Text(
+                          isRejected ? 'Rechazado' : 'Aprobado',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: isRejected
+                                ? PdfColors.red800
+                                : PdfColors.green800,
                           ),
-                          pw.Text(
-                            'Desde ${dateFormat.format(permStartDate)} hasta ${dateFormat.format(permEndDate)}',
-                            style: const pw.TextStyle(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                      pw.SizedBox(height: 4),
-                      
-                      // Días solicitados
-                      pw.Row(
-                        children: [
-                          pw.SizedBox(
-                            width: 80,
-                            child: pw.Text(
-                              'Días:',
-                              style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          pw.Text(
-                            '$daysRequested ${daysRequested == 1 ? "día" : "días"}',
-                            style: const pw.TextStyle(fontSize: 11),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                );
-              }).toList(),
-          ];
-        },
-        footer: (context) {
-          return pw.Container(
-            alignment: pw.Alignment.center,
-            margin: const pw.EdgeInsets.only(top: 10),
-            child: pw.Column(
-              children: [
-                pw.Divider(thickness: 1),
-                pw.SizedBox(height: 5),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Desarrollado por GuntherSOFT, 2026',
-                      style: pw.TextStyle(
-                        fontSize: 9,
-                        fontStyle: pw.FontStyle.italic,
-                      ),
-                    ),
-                    pw.Text(
-                      'Página ${context.pageNumber} de ${context.pagesCount}',
-                      style: const pw.TextStyle(fontSize: 9),
-                    ),
+                  pw.SizedBox(height: 8),
+
+                  // Motivo solicitud
+                  _buildRow('Motivo:', reason),
+                  pw.SizedBox(height: 4),
+
+                  // Período
+                  _buildRow(
+                    'Período:',
+                    'Desde ${dateFormat.format(permStartDate)} hasta ${dateFormat.format(permEndDate)}',
+                  ),
+                  pw.SizedBox(height: 4),
+
+                  // Días
+                  _buildRow(
+                    'Días:',
+                    '$daysRequested ${daysRequested == 1 ? "día" : "días"}',
+                  ),
+
+                  // Motivo rechazo (solo si aplica)
+                  if (isRejected && rejectionReason != null) ...[
+                    pw.SizedBox(height: 4),
+                    _buildRow('Motivo rechazo:', rejectionReason,
+                        labelColor: PdfColors.red700),
                   ],
+                ],
+              ),
+            );
+          }).toList();
+        },
+        footer: (context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Desarrollado por GuntherSOFT, 2026',
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontStyle: pw.FontStyle.italic,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+                pw.Text(
+                  'Pág. ${context.pageNumber} de ${context.pagesCount}',
+                  style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
                 ),
               ],
             ),
-          );
-        },
+            pw.SizedBox(height: 3),
+            pw.Center(
+              child: pw.Text(
+                'Documento generado automáticamente · Sistema de Gestión Integral · Sexta Compañía de Bomberos',
+                style: pw.TextStyle(fontSize: 6, color: PdfColors.grey500),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
-    // Mostrar vista de impresión/compartir
     await Printing.layoutPdf(
       onLayout: (format) async => pdf.save(),
+    );
+  }
+
+  pw.Widget _buildRow(String label, String value,
+      {PdfColor labelColor = PdfColors.black}) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(
+          width: 100,
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 10,
+              fontWeight: pw.FontWeight.bold,
+              color: labelColor,
+            ),
+          ),
+        ),
+        pw.Expanded(
+          child: pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+        ),
+      ],
     );
   }
 }

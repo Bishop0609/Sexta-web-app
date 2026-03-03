@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sexta_app/core/constants/app_constants.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/widgets/app_drawer.dart';
@@ -278,6 +279,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                          style: TextStyle(
                            fontSize: 11,
                            color: Colors.grey[600],
+                         ),
+                       ),
+                       const SizedBox(height: 4),
+                       Text(
+                         AppConstants.appVersion,
+                         textAlign: TextAlign.center,
+                         style: TextStyle(
+                           fontSize: 11,
+                           color: Colors.grey[500],
+                           fontWeight: FontWeight.w600,
+                           letterSpacing: 1.2,
                          ),
                        ),
                      ],

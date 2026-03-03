@@ -24,6 +24,13 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   bool _isLoading = false;
+  
+  // Variables para ordenamiento
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+  
+  // Caché de deudas de usuarios
+  final Map<String, int> _userDebts = {};
 
   @override
   void initState() {
@@ -70,6 +77,34 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
       }
     });
   }
+  
+  /// Ordenar usuarios por columna
+  void _sort<T>(Comparable<T> Function(UserModel) getField, int columnIndex) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      if (_sortColumnIndex == columnIndex) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortAscending = true;
+      }
+      
+      _filteredUsers.sort((a, b) {
+        final aValue = getField(a);
+        final bValue = getField(b);
+        return _sortAscending 
+            ? Comparable.compare(aValue as Comparable, bValue as Comparable)
+            : Comparable.compare(bValue as Comparable, aValue as Comparable);
+      });
+    });
+  }
+  
+  /// Formatear moneda
+  String _formatCurrency(int amount) {
+    return '\$${amount.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    )}';
+  }
 
   void _showEditDialog(UserModel user) {
     showDialog(
@@ -78,6 +113,10 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
         user: user,
         onSave: (updatedUser) async {
           await _userService.updateUser(updatedUser);
+          
+          // Recalcular cuotas existentes por si cambió configuración de estudiante
+          await _treasuryService.recalculateUserQuotas(updatedUser.id);
+          
           _loadUsers();
         },
       ),
@@ -207,96 +246,162 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
                         style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                     )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('Nombre')),
-                            DataColumn(label: Text('RUT')),
-                            DataColumn(label: Text('Cargo')),
-                            DataColumn(label: Text('Estudiante')),
-                            DataColumn(label: Text('Inicio Cuotas')),
-                            DataColumn(label: Text('Inicio Estudiante')),
-                            DataColumn(label: Text('Fin Estudiante')),
-                            DataColumn(label: Text('Acciones')),
-                          ],
-                          rows: _filteredUsers.map((user) {
-                            final canPromote = user.rank == 'Aspirante' || user.rank == 'Postulante';
-                            
-                            return DataRow(cells: [
-                              DataCell(Text(user.fullName)),
-                              DataCell(Text(user.rut)),
-                              DataCell(
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final showRut = width > 1100;
+                        final showDates = width > 1300; // Fechas ocupan mucho espacio
+                        
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          child: SizedBox(
+                            width: width,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.topCenter,
+                              child: DataTable(
+                                sortColumnIndex: _sortColumnIndex,
+                                sortAscending: _sortAscending,
+                                columnSpacing: 16,
+                                columns: [
+                                  DataColumn(
+                                    label: const Text('Nombre'),
+                                    onSort: (columnIndex, _) => _sort<String>((u) => u.fullName, columnIndex),
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: _getRankColor(user.rank).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
+                                  if (showRut) DataColumn(
+                                    label: const Text('RUT'),
+                                    onSort: (columnIndex, _) => _sort<String>((u) => u.rut, columnIndex),
                                   ),
-                                  child: Text(
-                                    user.rank,
-                                    style: TextStyle(
-                                      color: _getRankColor(user.rank),
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  DataColumn(
+                                    label: const Text('Cargo'),
+                                    onSort: (columnIndex, _) => _sort<String>((u) => u.rank, columnIndex),
                                   ),
-                                ),
-                              ),
-                              DataCell(
-                                Icon(
-                                  user.isStudent ? Icons.check_circle : Icons.cancel,
-                                  color: user.isStudent ? AppTheme.efectivaColor : Colors.grey,
-                                  size: 20,
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  user.paymentStartDate != null
-                                      ? '${user.paymentStartDate!.month.toString().padLeft(2, '0')}/${user.paymentStartDate!.year}'
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  user.studentStartDate != null
-                                      ? '${user.studentStartDate!.month.toString().padLeft(2, '0')}/${user.studentStartDate!.year}'
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  user.studentEndDate != null
-                                      ? '${user.studentEndDate!.month.toString().padLeft(2, '0')}/${user.studentEndDate!.year}'
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (canPromote)
-                                      IconButton(
-                                        icon: const Icon(Icons.military_tech, size: 20),
-                                        color: Colors.amber[700],
-                                        onPressed: () => _showPromoteDialog(user),
-                                        tooltip: 'Pasar a Bombero',
+                                  const DataColumn(label: Text('Estudiante')),
+                                  if (showDates) const DataColumn(label: Text('Inicio Cuotas')),
+                                  if (showDates) const DataColumn(label: Text('Inicio Estudiante')),
+                                  if (showDates) const DataColumn(label: Text('Fin Estudiante')),
+                                  const DataColumn(label: Text('Deuda Actual')),
+                                  const DataColumn(label: Text('Acciones')),
+                                ],
+                                rows: _filteredUsers.map((user) {
+                                  final canPromote = user.rank == 'Aspirante' || user.rank == 'Postulante';
+                                  
+                                  return DataRow(cells: [
+                                    DataCell(ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 200),
+                                      child: Text(user.fullName, overflow: TextOverflow.ellipsis),
+                                    )),
+                                    if (showRut) DataCell(Text(user.rut)),
+                                    DataCell(
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _getRankColor(user.rank).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          user.rank,
+                                          style: TextStyle(
+                                            color: _getRankColor(user.rank),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, size: 20),
-                                      onPressed: () => _showEditDialog(user),
-                                      tooltip: 'Editar Configuración',
                                     ),
-                                  ],
-                                ),
+                                    DataCell(
+                                      Icon(
+                                        user.isStudent ? Icons.check_circle : Icons.cancel,
+                                        color: user.isStudent ? AppTheme.efectivaColor : Colors.grey,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    if (showDates) DataCell(
+                                      Text(
+                                        user.paymentStartDate != null
+                                            ? '${user.paymentStartDate!.month.toString().padLeft(2, '0')}/${user.paymentStartDate!.year}'
+                                            : '-',
+                                      ),
+                                    ),
+                                    if (showDates) DataCell(
+                                      Text(
+                                        user.studentStartDate != null
+                                            ? '${user.studentStartDate!.month.toString().padLeft(2, '0')}/${user.studentStartDate!.year}'
+                                            : '-',
+                                      ),
+                                    ),
+                                    if (showDates) DataCell(
+                                      Text(
+                                        user.studentEndDate != null
+                                            ? '${user.studentEndDate!.month.toString().padLeft(2, '0')}/${user.studentEndDate!.year}'
+                                            : '-',
+                                      ),
+                                    ),
+                                    // Nueva celda: Deuda Actual
+                                    DataCell(
+                                      FutureBuilder<Map<String, dynamic>>(
+                                        future: _treasuryService.calculateUserDebt(user.id),
+                                        builder: (context, snapshot) {
+                                          if (!snapshot.hasData) {
+                                            return const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            );
+                                          }
+                                          final amount = snapshot.data?['total_amount'] ?? 0;
+                                          
+                                          // Guardar en caché
+                                          _userDebts[user.id] = amount;
+                                          
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: amount > 0 
+                                                  ? Colors.red.shade50 
+                                                  : Colors.green.shade50,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              _formatCurrency(amount),
+                                              style: TextStyle(
+                                                color: amount > 0 ? Colors.red.shade900 : Colors.green.shade900,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (canPromote)
+                                            IconButton(
+                                              icon: const Icon(Icons.military_tech, size: 20),
+                                              color: Colors.amber[700],
+                                              onPressed: () => _showPromoteDialog(user),
+                                              tooltip: 'Pasar a Bombero',
+                                            ),
+                                          IconButton(
+                                            icon: const Icon(Icons.edit, size: 20),
+                                            onPressed: () => _showEditDialog(user),
+                                            tooltip: 'Editar Configuración',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ]);
+                                }).toList(),
                               ),
-                            ]);
-                          }).toList(),
-                        ),
-                      ),
+                            ),
+                          ),
+                        );
+                      }
                     ),
         ),
       ],
@@ -351,6 +456,20 @@ class _TreasuryUserEditDialogState extends State<_TreasuryUserEditDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    // Validación de fechas cruzadas
+    if (_studentEndDate != null && _studentStartDate != null) {
+      if (_studentEndDate!.isBefore(_studentStartDate!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ La fecha de fin no puede ser anterior a la de inicio'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
 
     setState(() => _isSaving = true);
 

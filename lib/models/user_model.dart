@@ -1,13 +1,13 @@
 /// Roles de usuario en el sistema
 /// 
-/// NUEVOS ROLES (8 total):
+/// ROLES (8 total) - según matriz aprobada:
 /// - admin: Control total del sistema
-/// - oficial1: Capitán y Jefe de compañía  
+/// - oficial1: Capitán y Tte 1 (todo excepto mantenimiento)
 /// - oficial2: Solo gestión de actividades
-/// - oficial3: Ayudantes
-/// - oficial4: Teniente a cargo
-/// - oficial5: Solo administración
-/// - oficial6: Tesorero (gestión de cuotas)
+/// - oficial3: Ayudantes (gestión amplia)
+/// - oficial4: Teniente a cargo de EPP + Actividades
+/// - oficial5: Solo administración de EPP
+/// - oficial6: Tesorero + Actividades
 /// - bombero: Usuario base
 /// 
 /// ROLES ANTIGUOS (deprecated, mantener para migración):
@@ -47,7 +47,7 @@ class UserModel {
   final String id;
   final String rut;
   final String victorNumber;
-  final String? registroCompania; // Nuevo campo: Registro de Compañía
+  final String? registroCompania; // Registro de Compañía
   final String fullName;
   final Gender gender;
   final MaritalStatus maritalStatus;
@@ -132,11 +132,9 @@ class UserModel {
 
   /// Parse role with backward compatibility for migration
   static UserRole _parseRole(String roleName) {
-    // Handle new role names
     try {
       return UserRole.values.firstWhere((e) => e.name == roleName);
     } catch (_) {
-      // Fallback to bombero if role not found
       return UserRole.bombero;
     }
   }
@@ -147,15 +145,15 @@ class UserModel {
       case UserRole.admin:
         return 'Administrador';
       case UserRole.oficial1:
-        return 'Capitán y Jefe';
+        return 'Capitán y Tte 1';
       case UserRole.oficial2:
-        return 'Gestión Actividades';
+        return 'Solo gestión de actividades';
       case UserRole.oficial3:
-        return 'Ayudante';
+        return 'Ayudantes';
       case UserRole.oficial4:
-        return 'Teniente a Cargo';
+        return 'Teniente a cargo de EPP';
       case UserRole.oficial5:
-        return 'Administración';
+        return 'Solo administración de EPP';
       case UserRole.oficial6:
         return 'Tesorero';
       case UserRole.bombero:
@@ -165,5 +163,26 @@ class UserModel {
       case UserRole.firefighter:
         return 'Bombero (Migrar)';
     }
+  }
+
+  String get initials {
+    if (fullName.isEmpty) return '?';
+    final parts = fullName.trim().split(' ');
+    if (parts.length == 1) {
+      return parts[0].isNotEmpty ? parts[0][0].toUpperCase() : '?';
+    }
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
+
+  String get firstName {
+    if (fullName.isEmpty) return '';
+    return fullName.split(' ').first;
+  }
+
+  String get lastName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    if (parts.length <= 1) return '';
+    return parts.sublist(1).join(' ');
   }
 }

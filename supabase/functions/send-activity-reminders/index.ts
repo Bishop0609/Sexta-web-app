@@ -10,6 +10,53 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+/**
+ * Ventanas de búsqueda por hora de ejecución (hora Chile, UTC-3):
+ * 
+ * Cron 1 - 09:00 Chile (12:00 UTC): actividades entre 01:00 y 11:00 Chile
+ * Cron 2 - 14:00 Chile (17:00 UTC): actividades entre 11:01 y 16:59 Chile
+ * Cron 3 - 20:00 Chile (23:00 UTC): actividades entre 17:00 y 23:59 Chile
+ * 
+ * NOTA: activity_date es solo fecha (sin hora), start_time es campo separado.
+ * Se filtran actividades del día siguiente y luego se compara start_time
+ * contra la ventana horaria correspondiente.
+ */
+function getTimeWindow(now: Date): { startTime: string, endTime: string } {
+    const chileHour = (now.getUTCHours() - 3 + 24) % 24
+
+    if (chileHour >= 6 && chileHour < 12) {
+        // Cron 1 (~09:00 Chile): actividades 00:00 - 11:00
+        return { startTime: '00:00:00', endTime: '11:00:00' }
+    } else if (chileHour >= 12 && chileHour < 18) {
+        // Cron 2 (~14:00 Chile): actividades 11:01 - 16:59
+        return { startTime: '11:01:00', endTime: '16:59:00' }
+    } else {
+        // Cron 3 (~20:00 Chile): actividades 17:00 - 23:59
+        return { startTime: '17:00:00', endTime: '23:59:00' }
+    }
+}
+
+/**
+ * Calcula la fecha de "mañana" en zona horaria Chile (UTC-3)
+ */
+function getTomorrowDateChile(now: Date): string {
+    // Convertir a hora Chile
+    const chileTime = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    // Sumar un día
+    chileTime.setUTCDate(chileTime.getUTCDate() + 1)
+    // Retornar solo la fecha YYYY-MM-DD
+    return chileTime.toISOString().split('T')[0]
+}
+
+/**
+ * Calcula la fecha de "pasado mañana" en zona horaria Chile (UTC-3)
+ */
+function getDayAfterTomorrowDateChile(now: Date): string {
+    const chileTime = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    chileTime.setUTCDate(chileTime.getUTCDate() + 2)
+    return chileTime.toISOString().split('T')[0]
+}
+
 serve(async (req) => {
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
@@ -22,22 +69,30 @@ serve(async (req) => {
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         const now = new Date()
 
+        const chileHour = (now.getUTCHours() - 3 + 24) % 24
+        const chileMin = now.getUTCMinutes()
+        console.log(`⏰ Hora Chile: ${chileHour}:${String(chileMin).padStart(2, '0')}`)
+
+        const timeWindow = getTimeWindow(now)
+        const tomorrowDate = getTomorrowDateChile(now)
+        const dayAfterDate = getDayAfterTomorrowDateChile(now)
+
+        console.log(`📆 Fecha mañana (Chile): ${tomorrowDate}`)
+        console.log(`🕐 Ventana horaria: ${timeWindow.startTime} → ${timeWindow.endTime}`)
+
         // =====================================================
         // RECORDATORIOS 48H
         // =====================================================
 
-        console.log('📅 Buscando actividades para recordatorio 48h...')
-
-        // Calcular ventana de tiempo: entre 47 y 49 horas desde ahora
-        const window48hStart = new Date(now.getTime() + 47 * 60 * 60 * 1000)
-        const window48hEnd = new Date(now.getTime() + 49 * 60 * 60 * 1000)
+        console.log(`\n📅 Buscando actividades 48h para ${dayAfterDate} entre ${timeWindow.startTime} y ${timeWindow.endTime}...`)
 
         const { data: activities48h, error: error48h } = await supabase
             .from('activities')
             .select('*')
             .eq('notify_48h', true)
-            .gte('activity_date', window48hStart.toISOString())
-            .lte('activity_date', window48hEnd.toISOString())
+            .eq('activity_date', dayAfterDate)
+            .gte('start_time', timeWindow.startTime)
+            .lte('start_time', timeWindow.endTime)
 
         if (error48h) {
             console.error('❌ Error buscando actividades 48h:', error48h)
@@ -53,18 +108,15 @@ serve(async (req) => {
         // RECORDATORIOS 24H
         // =====================================================
 
-        console.log('📅 Buscando actividades para recordatorio 24h...')
-
-        // Calcular ventana de tiempo: entre 23 y 25 horas desde ahora  
-        const window24hStart = new Date(now.getTime() + 23 * 60 * 60 * 1000)
-        const window24hEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000)
+        console.log(`\n📅 Buscando actividades 24h para ${tomorrowDate} entre ${timeWindow.startTime} y ${timeWindow.endTime}...`)
 
         const { data: activities24h, error: error24h } = await supabase
             .from('activities')
             .select('*')
             .eq('notify_24h', true)
-            .gte('activity_date', window24hStart.toISOString())
-            .lte('activity_date', window24hEnd.toISOString())
+            .eq('activity_date', tomorrowDate)
+            .gte('start_time', timeWindow.startTime)
+            .lte('start_time', timeWindow.endTime)
 
         if (error24h) {
             console.error('❌ Error buscando actividades 24h:', error24h)
@@ -76,7 +128,7 @@ serve(async (req) => {
             }
         }
 
-        console.log('✅ Proceso de recordatorios completado')
+        console.log('\n✅ Proceso de recordatorios completado')
 
         return new Response(
             JSON.stringify({ success: true, message: 'Reminders processed' }),
@@ -162,7 +214,7 @@ async function processReminders(supabase: any, activities: any[], hoursBefore: n
                     emailsFailed++
                 }
 
-                // Delay de 500ms para respetar el rate limit de Resend (2 requests/segundo)
+                // Delay de 500ms para respetar el rate limit de Brevo
                 await new Promise(resolve => setTimeout(resolve, 500))
             }
 
@@ -183,7 +235,6 @@ async function processReminders(supabase: any, activities: any[], hoursBefore: n
 }
 
 async function getFilteredUsers(supabase: any, groups: string[]): Promise<any[]> {
-    // Obtener todos los usuarios
     const { data: allUsers, error } = await supabase
         .from('users')
         .select('id, full_name, email, role, rank')
@@ -194,69 +245,48 @@ async function getFilteredUsers(supabase: any, groups: string[]): Promise<any[]>
         return []
     }
 
-    // Si "all" está en los grupos, devolver todos
     if (groups.includes('all')) {
         return allUsers
     }
 
-    // Filtrar por grupos específicos
     return allUsers.filter(user => {
-        // Oficiales
         if (groups.includes('officers') && isOfficer(user.rank)) {
             return true
         }
-
-        // Postulantes/Aspirantes
         if (groups.includes('applicants') && isApplicant(user.rank)) {
             return true
         }
-
-        // Bomberos Activos
         if (groups.includes('active_firefighters') && user.role === 'bombero') {
             return true
         }
-
-        // Bomberos Honorarios
         if (groups.includes('honorary_firefighters') && isHonorary(user.rank)) {
             return true
         }
-
-        // Consejeros de Disciplina (por implementar)
         if (groups.includes('discipline_council')) {
-            // TODO: Definir criterio específico
             return false
         }
-
         return false
     })
 }
 
-/**
- * Verifica si el usuario es oficial basándose en su rango (rank)
- * IMPORTANTE: Solo OFICIALES DE COMPAÑÍA (excluye oficiales de cuerpo/generales)
- */
 function isOfficer(rank: string): boolean {
     const rankLower = rank.toLowerCase()
 
-    // Solo Oficiales de Compañía (NO incluye oficiales de cuerpo/generales)
     const companyOfficerPatterns = [
         'director',
-        'secretari',      // Secretario/a, Pro-Secretario/a
-        'tesorer',        // Tesorero/a, Pro-Tesorero/a
+        'secretari',
+        'tesorer',
         'capitán',
         'teniente',
-        'inspector m.',   // Inspector M. Mayor/Menor
+        'inspector m.',
     ]
 
-    // Verificar patrones de Oficiales de Compañía
     for (const pattern of companyOfficerPatterns) {
         if (rankLower.includes(pattern)) {
             return true
         }
     }
 
-    // Caso especial: "Ayudante" SOLO si es de compañía
-    // Excluir "Ayudante de Comandancia" (es oficial de cuerpo)
     if (rankLower.includes('ayudante') && !rankLower.includes('de comandancia')) {
         return true
     }
@@ -286,7 +316,7 @@ function formatDate(dateString: string): string {
 }
 
 function formatTime(timeString: string): string {
-    return timeString.substring(0, 5) // "HH:MM:SS" -> "HH:MM"
+    return timeString.substring(0, 5)
 }
 
 function getActivityTypeDisplay(type: string): string {
