@@ -38,7 +38,10 @@ import 'package:sexta_app/screens/guards/guard_registration_period_screen.dart';
 
 import 'package:sexta_app/screens/admin/maintenance_screen.dart';
 import 'package:sexta_app/screens/admin/holidays_screen.dart';
-
+import 'package:sexta_app/screens/rifa/rifa_main_screen.dart';
+import 'package:sexta_app/screens/reports/reports_screen.dart';
+import 'package:sexta_app/screens/reports/reports_hub_screen.dart';
+import 'package:sexta_app/screens/reports/night_guard_report_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -196,6 +199,22 @@ final _router = GoRouter(
     GoRoute(
       path: '/holidays',
       builder: (context, state) => const HolidaysScreen(),
+    ),
+    GoRoute(
+      path: '/rifa',
+      builder: (context, state) => const RifaMainScreen(),
+    ),
+    GoRoute(
+      path: '/reports/general',
+      builder: (context, state) => const ReportsScreen(),
+    ),
+    GoRoute(
+      path: '/reports',
+      builder: (context, state) => const ReportsHubScreen(),
+    ),
+    GoRoute(
+      path: '/reports/night-guard',
+      builder: (context, state) => const NightGuardReportScreen(),
     ),
   ],
 );

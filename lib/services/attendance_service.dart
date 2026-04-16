@@ -8,7 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 class AttendanceService {
   final SupabaseService _supabase = SupabaseService();
 
-  /// LÓGICA CRÍTICA: Verifica si un usuario tiene licencia aprobada para una fecha
+  /// LÓGICA CRÍTICA: Verifica si un usuario tiene permiso aprobado para una fecha
   Future<bool> hasApprovedLicense(String userId, DateTime eventDate) async {
     final permissions = await _supabase.getActivePermissions(userId, eventDate);
     return permissions.isNotEmpty;
@@ -17,8 +17,9 @@ class AttendanceService {
   /// Prepares attendance list with auto-check of licenses (OPTIMIZED: batch load)
   Future<List<Map<String, dynamic>>> prepareAttendanceList(
     List<UserModel> users,
-    DateTime eventDate,
-  ) async {
+    DateTime eventDate, {
+    String? actividadId,
+  }) async {
     // OPTIMIZATION: Batch load ALL active licenses for this date in single query
     final allLicenses = await _supabase.getAllActivePermissionsForDate(eventDate);
     
@@ -28,6 +29,16 @@ class AttendanceService {
       usersWithLicenses.add(license['user_id'] as String);
     }
 
+    if (actividadId != null) {
+      final permisosActividad = await _supabase.client.rpc(
+        'get_permisos_por_actividad',
+        params: {'p_actividad_id': actividadId},
+      );
+      for (final permiso in permisosActividad as List) {
+        usersWithLicenses.add(permiso['user_id'] as String);
+      }
+    }
+
     final attendanceList = <Map<String, dynamic>>[];
 
     for (final user in users) {
@@ -35,8 +46,8 @@ class AttendanceService {
       
       attendanceList.add({
         'user': user,
-        'status': hasLicense ? AttendanceStatus.licencia : AttendanceStatus.absent,
-        'isLocked': hasLicense, // Block editing if has license
+        'status': hasLicense ? AttendanceStatus.permiso : AttendanceStatus.absent,
+        'isLocked': hasLicense, // Bloquear edición si tiene permiso aprobado
         'hasLicense': hasLicense,
       });
     }
@@ -52,17 +63,20 @@ class AttendanceService {
     required List<Map<String, dynamic>> attendanceRecords,
     String? subtype,
     String? location,
+    String? actividadId,
+    String? modoAsistencia,
   }) async {
     // 1. Crear evento
     final eventData = {
       'act_type_id': actTypeId,
       'event_date': eventDate.toIso8601String().split('T')[0],
       'created_by': createdBy,
-      'created_at': DateTime.now().toIso8601String(),
     };
     
     if (subtype != null) eventData['subtype'] = subtype;
     if (location != null) eventData['location'] = location;
+    if (actividadId != null) eventData['actividad_id'] = actividadId;
+    if (modoAsistencia != null) eventData['modo_asistencia'] = modoAsistencia;
     
     final eventId = await _supabase.createAttendanceEvent(eventData);
 
@@ -73,7 +87,6 @@ class AttendanceService {
         'user_id': record['userId'],
         'status': record['status'],
         'is_locked': record['isLocked'] ?? false,
-        'created_at': DateTime.now().toIso8601String(),
       };
     }).toList();
 
@@ -102,6 +115,7 @@ class AttendanceService {
           *,
           event:attendance_events!inner(
             event_date,
+            subtype,
             act_type:act_types!inner(name, category)
           )
         ''')
@@ -118,6 +132,7 @@ class AttendanceService {
         'event_date': record['event']['event_date'],
         'act_type_name': record['event']['act_type']['name'],
         'act_type_category': record['event']['act_type']['category'],
+        'subtype': record['event']['subtype'],
       };
     }).toList();
   }
@@ -137,7 +152,7 @@ class AttendanceService {
 
     // Solo admin puede editar registros bloqueados
     if (isLocked && !isAdmin) {
-      throw Exception('No se puede modificar un registro con licencia activa. Solo administradores.');
+      throw Exception('No se puede modificar un registro con permiso activo. Solo administradores.');
     }
 
     await _supabase.updateAttendanceRecord(recordId, {
@@ -193,14 +208,19 @@ class AttendanceService {
 
   /// NEW: Calcula estadísticas de asistencia a citaciones y emergencias
   /// del mes actual para un usuario específico
-  Future<Map<String, dynamic>> calculateCitationAndEmergencyStats(String userId) async {
+  Future<Map<String, dynamic>> calculateCitationAndEmergencyStats(
+    String userId, {
+    int? month,
+    int? year,
+  }) async {
     final supabaseClient = _supabase.client;
     final now = DateTime.now();
-    final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
-    final firstDayOfYear = DateTime(now.year, 1, 1);
+    final targetMonth = month ?? now.month;
+    final targetYear = year ?? now.year;
+    final firstDayOfMonth = DateTime(targetYear, targetMonth, 1);
+    final lastDayOfMonth = DateTime(targetYear, targetMonth + 1, 0);
+    final firstDayOfYear = DateTime(targetYear, 1, 1);
 
-    // Obtener TODOS los registros del año donde el usuario estuvo presente
     final response = await supabaseClient
         .from('attendance_records')
         .select('''
@@ -232,9 +252,11 @@ class AttendanceService {
       final isCitation = [
       'Academia de Compañía',
       'Academia de Cuerpo',
-      'Citación de Comandancia',
-      'Citación de Superintendencia',
-      'Reunión de Compañía'
+      'Reunión Ordinaria',
+      'Reunión Extraordinaria',
+      'Citación de Compañía',
+      'Citación de Cuerpo',
+      'Otra Actividad'
     ].contains(actTypeName);
     final isEmergency = actTypeName == 'Emergencia';
       
@@ -243,7 +265,7 @@ class AttendanceService {
       if (isEmergency) yearEmergencyCount++;
       
       // Contar para el MES ACTUAL
-      if (eventDate.month == now.month && eventDate.year == now.year) {
+      if (eventDate.month == targetMonth && eventDate.year == targetYear) {
         if (isCitation) monthCitationCount++;
         if (isEmergency) monthEmergencyCount++;
       }
@@ -267,9 +289,11 @@ class AttendanceService {
       if ([
       'Academia de Compañía',
       'Academia de Cuerpo',
-      'Citación de Comandancia',
-      'Citación de Superintendencia',
-      'Reunión de Compañía'
+      'Reunión Ordinaria',
+      'Reunión Extraordinaria',
+      'Citación de Compañía',
+      'Citación de Cuerpo',
+      'Otra Actividad'
     ].contains(actTypeName)) {
       monthTotalCitationEvents++;
     } else if (actTypeName == 'Emergencia') {
@@ -295,9 +319,11 @@ class AttendanceService {
       if ([
       'Academia de Compañía',
       'Academia de Cuerpo',
-      'Citación de Comandancia',
-      'Citación de Superintendencia',
-      'Reunión de Compañía'
+      'Reunión Ordinaria',
+      'Reunión Extraordinaria',
+      'Citación de Compañía',
+      'Citación de Cuerpo',
+      'Otra Actividad'
     ].contains(actTypeName)) {
       yearTotalCitationEvents++;
     } else if (actTypeName == 'Emergencia') {
@@ -338,7 +364,7 @@ class AttendanceService {
       'year_emergency_pct': yearEmergencyPct,
       
       // Metadata
-      'month_name': DateFormat('MMMM', 'es_ES').format(now),
+      'month_name': DateFormat('MMMM', 'es_ES').format(DateTime(targetYear, targetMonth)),
       'year': now.year,
     };
   }
@@ -385,10 +411,15 @@ class AttendanceService {
           };
         }
         
-        if (actTypeName.toLowerCase().contains('citac') || 
-            actTypeName.toLowerCase().contains('citación')) {
+        const citationTypes = [
+          'Academia de Compañía', 'Academia de Cuerpo',
+          'Reunión Ordinaria', 'Reunión Extraordinaria',
+          'Citación de Compañía', 'Citación de Cuerpo',
+          'Otra Actividad',
+        ];
+        if (citationTypes.contains(actTypeName)) {
           monthlyData[monthKey]!['citation'] = (monthlyData[monthKey]!['citation'] ?? 0) + 1;
-        } else if (actTypeName.toLowerCase() == 'emergencia') {
+        } else if (actTypeName == 'Emergencia') {
           monthlyData[monthKey]!['emergency'] = (monthlyData[monthKey]!['emergency'] ?? 0) + 1;
         }
       }
@@ -474,14 +505,14 @@ class AttendanceService {
   /// Visible para todos los usuarios
   Future<List<Map<String, dynamic>>> getRecentAttendanceHistory() async {
     final supabaseClient = _supabase.client;
-    final twoHoursAgo = DateTime.now().subtract(const Duration(hours: 2));
+    final twoHoursAgo = DateTime.now().toUtc().subtract(const Duration(hours: 2));
     
     final response = await supabaseClient
         .from('attendance_events')
         .select('''
           *,
           act_types(name),
-          users!attendance_events_created_by_fkey(nombre, apellido)
+          users!attendance_events_created_by_fkey(full_name)
         ''')
         .gte('created_at', twoHoursAgo.toIso8601String())
         .order('created_at', ascending: false);
@@ -494,12 +525,12 @@ class AttendanceService {
       final eventId = event['id'] as String;
       final records = await getEventAttendanceRecords(eventId);
       
-      int present = 0, absent = 0, licencia = 0;
+      int present = 0, absent = 0, permiso = 0;
       for (final record in records) {
         switch (record['status']) {
           case 'present': present++; break;
           case 'absent': absent++; break;
-          case 'licencia': licencia++; break;
+          case 'permiso': permiso++; break;
         }
       }
       
@@ -507,7 +538,7 @@ class AttendanceService {
         ...event,
         'total_present': present,
         'total_absent': absent,
-        'total_licencia': licencia,
+        'total_licencia': permiso,
       });
     }
     
@@ -611,7 +642,7 @@ class AttendanceService {
         .select('''
           *,
           act_types(name),
-          users!attendance_events_created_by_fkey(nombre, apellido)
+          users!attendance_events_created_by_fkey(full_name)
         ''')
         .eq('estado_revision', 'pendiente')
         .order('created_at', ascending: false);

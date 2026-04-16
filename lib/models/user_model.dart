@@ -42,6 +42,16 @@ enum MaritalStatus {
   married,
 }
 
+/// Estado del bombero en la compañía
+enum UserStatus {
+  activo,
+  suspendido,
+  renunciado,
+  expulsado,
+  separado,
+  fallecido,
+}
+
 /// Modelo de usuario (bombero)
 class UserModel {
   final String id;
@@ -54,8 +64,12 @@ class UserModel {
   final String rank;
   final UserRole role;
   final String? email;
+  final UserStatus status;
   final DateTime? createdAt;
   
+  final DateTime? birthDate;
+  final DateTime? enrollmentDate;
+
   // Campos de Tesorería
   final bool isStudent; // Indica si paga cuota reducida ($2,500)
   final DateTime? paymentStartDate; // Fecha desde la cual debe pagar cuotas
@@ -73,7 +87,10 @@ class UserModel {
     required this.rank,
     required this.role,
     this.email,
+    this.status = UserStatus.activo,
     this.createdAt,
+    this.birthDate,
+    this.enrollmentDate,
     this.isStudent = false,
     this.paymentStartDate,
     this.studentStartDate,
@@ -94,8 +111,15 @@ class UserModel {
       rank: json['rank'] as String,
       role: _parseRole(json['role'] as String),
       email: json['email'] as String?,
+      status: parseStatus(json['status'] as String? ?? 'activo'),
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at'] as String)
+          : null,
+      birthDate: json['birth_date'] != null
+          ? DateTime.parse(json['birth_date'] as String)
+          : null,
+      enrollmentDate: json['enrollment_date'] != null
+          ? DateTime.parse(json['enrollment_date'] as String)
           : null,
       isStudent: json['is_student'] as bool? ?? false,
       paymentStartDate: json['payment_start_date'] != null
@@ -122,7 +146,10 @@ class UserModel {
       'rank': rank,
       'role': role.name,
       'email': email,
+      'status': status.name,
       'created_at': createdAt?.toIso8601String(),
+      'birth_date': birthDate?.toIso8601String().split('T')[0],
+      'enrollment_date': enrollmentDate?.toIso8601String().split('T')[0],
       'is_student': isStudent,
       'payment_start_date': paymentStartDate?.toIso8601String(),
       'student_start_date': studentStartDate?.toIso8601String(),
@@ -136,6 +163,14 @@ class UserModel {
       return UserRole.values.firstWhere((e) => e.name == roleName);
     } catch (_) {
       return UserRole.bombero;
+    }
+  }
+
+  static UserStatus parseStatus(String statusName) {
+    try {
+      return UserStatus.values.firstWhere((e) => e.name == statusName);
+    } catch (_) {
+      return UserStatus.activo;
     }
   }
 
@@ -164,6 +199,25 @@ class UserModel {
         return 'Bombero (Migrar)';
     }
   }
+
+  String getStatusDisplayName() {
+    switch (status) {
+      case UserStatus.activo:
+        return 'Activo';
+      case UserStatus.suspendido:
+        return 'Suspendido';
+      case UserStatus.renunciado:
+        return 'Renunciado';
+      case UserStatus.expulsado:
+        return 'Expulsado';
+      case UserStatus.separado:
+        return 'Separado';
+      case UserStatus.fallecido:
+        return 'Fallecido';
+    }
+  }
+
+  bool get isActive => status == UserStatus.activo;
 
   String get initials {
     if (fullName.isEmpty) return '?';

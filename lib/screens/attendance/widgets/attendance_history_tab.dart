@@ -34,7 +34,14 @@ class _AttendanceHistoryTabState extends State<AttendanceHistoryTab> {
     try {
       // Obtener usuario actual
       final user = Supabase.instance.client.auth.currentUser;
-      _currentUserId = user?.id;
+      if (user != null) {
+        final userData = await Supabase.instance.client
+            .from('users')
+            .select('id')
+            .eq('auth_id', user.id)
+            .single();
+        _currentUserId = userData['id'] as String;
+      }
       
       // Cargar historial de últimas 2 horas
       final events = await _attendanceService.getRecentAttendanceHistory();

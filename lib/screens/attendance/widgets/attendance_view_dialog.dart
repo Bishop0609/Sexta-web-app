@@ -56,7 +56,7 @@ class AttendanceViewDialog extends StatelessWidget {
                   _buildInfoRow('Fecha', DateFormat('dd/MM/yyyy').format(DateTime.parse(event['event_date'] as String))),
                   _buildInfoRow('Subtipo', event['subtype'] as String? ?? 'N/A'),
                   _buildInfoRow('Ubicación', event['location'] as String? ?? 'N/A'),
-                  _buildInfoRow('Registrado por', '${event['users']['nombre']} ${event['users']['apellido']}'),
+                  _buildInfoRow('Registrado por', event['users']?['full_name'] as String? ?? 'Desconocido'),
                 ],
               ),
             ),
@@ -113,7 +113,7 @@ class AttendanceViewDialog extends StatelessWidget {
         children: [
           _buildTotalItem('Presentes', totals['present']!, Colors.green),
           _buildTotalItem('Ausentes', totals['absent']!, Colors.red),
-          _buildTotalItem('Permisos', totals['licencia']!, Colors.orange),
+          _buildTotalItem('Permisos', totals['permiso']!, Colors.orange),
         ],
       ),
     );
@@ -159,7 +159,7 @@ class AttendanceViewDialog extends StatelessWidget {
         statusColor = Colors.red;
         statusIcon = Icons.cancel;
         break;
-      case 'licencia':
+      case 'permiso':
         statusColor = Colors.orange;
         statusIcon = Icons.event_busy;
         break;
@@ -176,12 +176,12 @@ class AttendanceViewDialog extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${user['nombre']} ${user['apellido']}',
+              user['user']?['full_name'] as String? ?? 'Sin nombre',
               style: const TextStyle(fontSize: 11),
             ),
           ),
           Text(
-            user['rango'] as String? ?? '',
+            user['user']?['rank'] as String? ?? '',
             style: TextStyle(fontSize: 10, color: Colors.grey[600]),
           ),
         ],
@@ -190,15 +190,15 @@ class AttendanceViewDialog extends StatelessWidget {
   }
 
   Map<String, int> _calculateTotals() {
-    int present = 0, absent = 0, licencia = 0;
+    int present = 0, absent = 0, permiso = 0;
     for (final record in records) {
       switch (record['status']) {
         case 'present': present++; break;
         case 'absent': absent++; break;
-        case 'licencia': licencia++; break;
+        case 'permiso': permiso++; break;
       }
     }
-    return {'present': present, 'absent': absent, 'licencia': licencia};
+    return {'present': present, 'absent': absent, 'permiso': permiso};
   }
 
   Future<void> _generatePdf() async {

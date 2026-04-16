@@ -164,7 +164,7 @@ class _GenerateGuardRosterScreenState
         if (start == null || end == null) continue;
         // Marcar cada día de la semana cubierto por el permiso
         for (int i = 0; i < 7; i++) {
-          final day = _currentWeekStart.add(Duration(days: i));
+          final day = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + i);
           if (!day.isBefore(start) && !day.isAfter(end)) {
             final key = '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
             newPermisosMap.putIfAbsent(userId, () => {}).add(key);
@@ -177,7 +177,9 @@ class _GenerateGuardRosterScreenState
         final dailyRosters = await _rosterService
             .getDailyRostersForWeek(_weeklyRoster!.id ?? '');
         for (var daily in dailyRosters) {
-          final dayIndex = daily.guardDate.difference(_currentWeekStart).inDays;
+          final guardDay = DateTime(daily.guardDate.year, daily.guardDate.month, daily.guardDate.day);
+          final weekDay0 = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day);
+          final dayIndex = guardDay.difference(weekDay0).inDays;
           if (dayIndex >= 0 && dayIndex < 7) {
             _weekAssignments[dayIndex] = DayAssignment(
               maquinistaId: daily.maquinistaId,
@@ -205,8 +207,7 @@ class _GenerateGuardRosterScreenState
 
   void _changeWeek(int delta) {
     setState(() {
-      _currentWeekStart = _currentWeekStart.add(Duration(days: 7 * delta));
-      _currentWeekStart = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day);
+      _currentWeekStart = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + 7 * delta);
       _initializeWeekAssignments();
     });
     _loadData();
@@ -214,8 +215,7 @@ class _GenerateGuardRosterScreenState
 
   void _changeFdsWeek(int delta) {
     setState(() {
-      _fdsWeekStart = _fdsWeekStart.add(Duration(days: 7 * delta));
-      _fdsWeekStart = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day);
+      _fdsWeekStart = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + 7 * delta);
       _initializeFdsAssignments();
     });
     _loadFdsData();
@@ -251,7 +251,7 @@ class _GenerateGuardRosterScreenState
   }
 
   bool _isUserAvailable(String userId, int dayIndex) {
-    final date = _currentWeekStart.add(Duration(days: dayIndex));
+    final date = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + dayIndex);
     final targetDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     
     for (var entry in _weeklyAvailability.entries) {
@@ -264,7 +264,7 @@ class _GenerateGuardRosterScreenState
   }
 
   bool _userHasPermiso(String userId, int dayIndex) {
-    final date = _currentWeekStart.add(Duration(days: dayIndex));
+    final date = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + dayIndex);
     final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return _permisosMap[userId]?.contains(key) ?? false;
   }
@@ -343,7 +343,7 @@ class _GenerateGuardRosterScreenState
     if (result != null && mounted) {
       // Verificar si el bombero seleccionado tiene permiso aprobado para ese día
       if (_userHasPermiso(result, dayIndex)) {
-        final date = _currentWeekStart.add(Duration(days: dayIndex));
+        final date = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + dayIndex);
         final fechaStr = DateFormat('EEEE dd/MM/yyyy', 'es_ES').format(date);
         final usuario = _usersMap[result];
         final nombreCompleto = usuario?.fullName ?? 'Este bombero';
@@ -383,6 +383,21 @@ class _GenerateGuardRosterScreenState
         if (continuar != true || !mounted) return;
       }
 
+      // Verificar asignación duplicada en el mismo día
+      final posicionDuplicada = _getPositionInDay(assignment, result, position, bomberoIndex);
+      if (posicionDuplicada != null) {
+        final nombre = _usersMap[result]?.fullName ?? result;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$nombre ya está asignado como $posicionDuplicada en este día.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+        return;
+      }
+
       setState(() {
         if (position == 'maquinista') {
           assignment.maquinistaId = result;
@@ -393,6 +408,19 @@ class _GenerateGuardRosterScreenState
         }
       });
     }
+  }
+
+  String? _getPositionInDay(
+      DayAssignment assignment, String userId, String editingPosition, int? editingBomberoIndex) {
+    if (assignment.maquinistaId == userId && editingPosition != 'maquinista') return 'Maquinista';
+    if (assignment.obacId == userId && editingPosition != 'obac') return 'OBAC';
+    for (int i = 0; i < assignment.bomberoIds.length; i++) {
+      if (assignment.bomberoIds[i] == userId) {
+        if (editingPosition == 'bombero' && editingBomberoIndex == i) continue;
+        return 'Bombero ${i + 1}';
+      }
+    }
+    return null;
   }
 
   Widget _buildUserCell(int dayIndex, String position, int? bomberoIndex) {
@@ -621,19 +649,26 @@ class _GenerateGuardRosterScreenState
                 children: [
                   Container(
                     height: 44,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
                       color: AppTheme.institutionalRed,
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      weekdays[dayIndex],
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final dayDate = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + dayIndex);
+                        final dayLabel = '${weekdays[dayIndex]}\n${dayDate.day.toString().padLeft(2,'0')}/${dayDate.month.toString().padLeft(2,'0')}';
+                        return Text(
+                          dayLabel,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      }
                     ),
                   ),
                   _buildUserCell(dayIndex, 'maquinista', null),
@@ -938,7 +973,7 @@ class _GenerateGuardRosterScreenState
       }
 
       for (int i = 0; i < 7; i++) {
-        final date = _currentWeekStart.add(Duration(days: i));
+        final date = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day + i);
         final assignment = _weekAssignments[i]!;
 
         await _rosterService.saveDailyRoster(
@@ -986,7 +1021,9 @@ class _GenerateGuardRosterScreenState
         final dailyRosters =
             await _rosterService.getDailyRostersForWeek(_fdsWeeklyRoster!.id ?? '');
         for (var daily in dailyRosters) {
-          final dayIndex = daily.guardDate.difference(_fdsWeekStart).inDays;
+          final guardDay = DateTime(daily.guardDate.year, daily.guardDate.month, daily.guardDate.day);
+          final weekDay0 = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day);
+          final dayIndex = guardDay.difference(weekDay0).inDays;
           if (dayIndex < 0 || dayIndex >= 7) continue;
           final period = daily.shiftPeriod ?? 'AM';
           if (period != 'AM' && period != 'PM') continue;
@@ -1023,7 +1060,7 @@ class _GenerateGuardRosterScreenState
       String userId, int dayIndex, String period) {
     final avail =
         period == 'AM' ? _fdsAvailabilityAm : _fdsAvailabilityPm;
-    final date = _fdsWeekStart.add(Duration(days: dayIndex));
+    final date = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + dayIndex);
     final key =
         '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     for (var entry in avail.entries) {
@@ -1208,7 +1245,7 @@ class _GenerateGuardRosterScreenState
           ),
           // Por cada día FDS, 2 columnas AM/PM
           ...fdsDayIndexes.expand((dayIndex) {
-            final date = _fdsWeekStart.add(Duration(days: dayIndex));
+            final date = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + dayIndex);
             final dayLabel = DateFormat('EEE dd/MM', 'es_ES').format(date);
             return ['AM', 'PM'].map((period) {
               return SizedBox(
@@ -1407,7 +1444,7 @@ class _GenerateGuardRosterScreenState
       for (final dayIndex in fdsDayIndexes) {
         for (final period in ['AM', 'PM']) {
           final avail = period == 'AM' ? _fdsAvailabilityAm : _fdsAvailabilityPm;
-          final date = _fdsWeekStart.add(Duration(days: dayIndex));
+          final date = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + dayIndex);
           final dateKey = DateTime(date.year, date.month, date.day);
 
           List<GuardAvailability> available = [];
@@ -1477,7 +1514,7 @@ class _GenerateGuardRosterScreenState
         );
       }
       for (final dayIndex in fdsDayIndexes) {
-        final date = _fdsWeekStart.add(Duration(days: dayIndex));
+        final date = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + dayIndex);
         for (final period in ['AM', 'PM']) {
           final a = _fdsAssignments[dayIndex]![period]!;
           await _rosterService.saveDailyRoster(
@@ -1750,7 +1787,7 @@ class _GenerateGuardRosterScreenState
   Widget _buildFdsTab() {
     // Calcular días FDS de la semana
     final fdsDayIndexes = List.generate(7, (i) {
-      final d = _fdsWeekStart.add(Duration(days: i));
+      final d = DateTime(_fdsWeekStart.year, _fdsWeekStart.month, _fdsWeekStart.day + i);
       return _isFdsDay(d) ? i : -1;
     }).where((i) => i >= 0).toList();
 

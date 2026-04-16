@@ -189,6 +189,7 @@ class _ModifyAttendanceScreenState extends State<ModifyAttendanceScreen> {
   DateTimeRange? _dateRange;
   String? _selectedActTypeId;
   List<Map<String, dynamic>> _actTypes = [];
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   @override
   void initState() {
@@ -257,12 +258,36 @@ class _ModifyAttendanceScreenState extends State<ModifyAttendanceScreen> {
     }
   }
 
+  /// Genera lista de meses desde enero 2026 hasta el mes actual
+  List<DateTime> _getMonthsList() {
+    final now = DateTime.now();
+    final List<DateTime> months = [];
+    // Desde el primer evento o enero del año actual
+    DateTime start = DateTime(2026, 1, 1);
+    DateTime current = DateTime(now.year, now.month, 1);
+    
+    while (start.isBefore(current) || start.isAtSameMomentAs(current)) {
+      months.add(start);
+      start = DateTime(start.year, start.month + 1, 1);
+    }
+    return months.reversed.toList(); // Más reciente primero
+  }
+
   void _applyFilters() {
     var filtered = _attendanceEvents;
 
     // Filtrar por pendientes de revisión
     if (_showOnlyPending) {
       filtered = filtered.where((event) => event['estado_revision'] == 'pendiente').toList();
+    }
+
+    // Filtrar por mes seleccionado (solo si no hay rango de fechas manual)
+    if (_dateRange == null) {
+      filtered = filtered.where((event) {
+        final eventDate = DateTime.parse(event['event_date']);
+        return eventDate.year == _selectedMonth.year &&
+               eventDate.month == _selectedMonth.month;
+      }).toList();
     }
 
     // Filtrar por rango de fechas
@@ -381,11 +406,48 @@ class _ModifyAttendanceScreenState extends State<ModifyAttendanceScreen> {
                     icon: const Icon(Icons.clear),
                     onPressed: () => setState(() {
                       _dateRange = null;
+                      _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
                       _applyFilters();
                     }),
                   ),
                 ],
               ],
+            ),
+            const SizedBox(height: 12),
+            // Selector de mes
+            SizedBox(
+              height: 36,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _getMonthsList().length,
+                itemBuilder: (context, index) {
+                  final month = _getMonthsList()[index];
+                  final isSelected = _dateRange == null &&
+                      month.year == _selectedMonth.year &&
+                      month.month == _selectedMonth.month;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(
+                        DateFormat('MMMM yyyy', 'es_CL').format(month),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isSelected ? Colors.white : null,
+                        ),
+                      ),
+                      selected: isSelected,
+                      selectedColor: AppTheme.institutionalRed,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedMonth = month;
+                          _dateRange = null; // Limpiar rango manual
+                          _applyFilters();
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 12),
             // Filtro por tipo de acto
@@ -626,7 +688,7 @@ class _ModifyAttendanceScreenState extends State<ModifyAttendanceScreen> {
     try {
       final records = await _supabase.getAttendanceRecordsByEvent(eventId);
       final attendees = records.where((r) => r['status'] == 'present').length;
-      final permits = records.where((r) => r['is_locked'] == true).length;
+      final permits = records.where((r) => r['status'] == 'permiso').length;
       return {'attendees': attendees, 'permits': permits};
     } catch (e) {
       return {'attendees': 0, 'permits': 0};
@@ -744,9 +806,9 @@ class _ModifyAttendanceScreenState extends State<ModifyAttendanceScreen> {
                                       statusIcon = Icons.cancel;
                                       statusText = 'Ausente';
                                       break;
-                                    case 'licencia':
+                                    case 'permiso':
                                       statusColor = Colors.orange;
-                                      statusIcon = Icons.lock;
+                                      statusIcon = Icons.event_available;
                                       statusText = 'Permiso';
                                       break;
                                     default:
@@ -919,8 +981,8 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
 
   // Mapa de subtipos
   final Map<String, List<String>> _actSubtypes = {
-    'Emergencia': ['10-0', '10-1', '10-2', '10-3', '10-4', '10-5', '10-6', '10-7', '10-8', '10-9', '10-10', '10-11', '10-12'],
-    'Reunión de Compañía': ['Ordinaria', 'Extraordinaria'],
+    'Emergencia': ['10-0', '10-1', '10-2', '10-3', '10-4', '10-5', '10-6', '10-7', '10-8', '10-9', '10-10', '10-11', '10-12', 'INCENDIO', '6-16', '0-11'],
+    'Otra Actividad': ['Otra Citación', 'Trabajo de Comandancia', 'Trabajo de Compañía'],
   };
 
   @override
@@ -1170,10 +1232,10 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
                           ...() {
                             final categoryRecords = entry.value;
                             
-                            // Separate by status: present, locked (licencia), absent
+                            // Separar por estado: presentes, con permiso, ausentes
                             final present = categoryRecords.where((r) => r['status'] == 'present').toList();
                             final permits = categoryRecords.where((r) => 
-                              r['is_locked'] == true || r['status'] == 'licencia'
+                              r['is_locked'] == true || r['status'] == 'permiso'
                             ).toList();
                             final absent = categoryRecords.where((r) => 
                               r['status'] == 'absent' && (r['is_locked'] != true)
@@ -1205,7 +1267,7 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
                                 Padding(
                                   padding: const EdgeInsets.only(left: 32, top: 4, bottom: 2),
                                   child: Text(
-                                    'Con Licencia (${permits.length})',
+                                    'Con Permiso (${permits.length})',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.orange[700],
@@ -1266,7 +1328,6 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
   }
   
   Widget _buildRecordTile(Map<String, dynamic> record) {
-    // Find the real index in _editableRecords
     final realIndex = _editableRecords.indexWhere(
       (r) => r['id'] == record['id'],
     );
@@ -1275,13 +1336,13 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
     
     final user = record['user'];
     final isLocked = record['is_locked'] == true;
-    final status = record['status'];
+    final status = record['status'] as String;
 
     return ListTile(
       dense: true,
       leading: Icon(
-        isLocked ? Icons.lock : Icons.person,
-        color: isLocked ? AppTheme.warningColor : null,
+        isLocked ? Icons.event_available : Icons.person,
+        color: isLocked ? Colors.orange : null,
         size: 20,
       ),
       title: Text(
@@ -1296,34 +1357,32 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isLocked)
-            IconButton(
-              icon: const Icon(Icons.lock_open, color: AppTheme.navyBlue),
-              tooltip: 'Desbloquear',
-              onPressed: () {
-                setState(() {
-                  _editableRecords[realIndex]['is_locked'] = false;
-                  _editableRecords[realIndex]['status'] = 'absent';
-                  _filterRecords(); // Refrescar filtro
-                });
-              },
-            )
-          else
-            DropdownButton<String>(
-              value: status,
-              isDense: true,
-              items: const [
-                DropdownMenuItem(value: 'present', child: Text('Presente')),
-                DropdownMenuItem(value: 'absent', child: Text('Ausente')),
-              ],
-              onChanged: (newStatus) {
-                if (newStatus != null) {
-                  setState(() {
-                    _editableRecords[realIndex]['status'] = newStatus;
-                    _filterRecords(); // Refrescar filtro
-                  });
-                }
-              },
+            Tooltip(
+              message: 'Permiso aprobado (auto-asignado)',
+              child: const Icon(Icons.lock_outline, size: 16, color: Colors.orange),
             ),
+          const SizedBox(width: 4),
+          DropdownButton<String>(
+            value: status,
+            isDense: true,
+            items: const [
+              DropdownMenuItem(value: 'present', child: Text('Presente')),
+              DropdownMenuItem(value: 'absent', child: Text('Ausente')),
+              DropdownMenuItem(value: 'permiso', child: Text('Permiso')),
+            ],
+            onChanged: (newStatus) {
+              if (newStatus != null) {
+                setState(() {
+                  _editableRecords[realIndex]['status'] = newStatus;
+                  // Si el editor cambia manualmente, desbloquear el registro
+                  if (newStatus != 'permiso') {
+                    _editableRecords[realIndex]['is_locked'] = false;
+                  }
+                  _filterRecords();
+                });
+              }
+            },
+          ),
         ],
       ),
     );

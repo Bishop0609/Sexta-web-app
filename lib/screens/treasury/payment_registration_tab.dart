@@ -683,52 +683,47 @@ class _PaymentAmountDialogState extends State<_PaymentAmountDialog> {
 
   Future<void> _sendPaymentNotifications(int amount, Map<String, dynamic> result) async {
     try {
-      // Verificar que el usuario tenga email
-      if (widget.user.email == null || widget.user.email!.isEmpty) {
-        print('⚠️ Usuario sin email, no se pueden enviar notificaciones');
-        return;
-      }
-
       final distribution = result['distribution'] as List;
-      
-      // Construir detalles de distribución para el correo
-      String monthsDetail = 'N/A';
-      int paymentYear = DateTime.now().year;
+      if (distribution.isEmpty) return;
 
-      if (distribution.isNotEmpty) {
-        // Año del primer mes distribuido
-        paymentYear = distribution.first['year'] as int;
+      const monthNames = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
 
-        const monthNames = [
-          'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-        ];
+      final descriptions = <String>[];
+      int? firstYear;
+      int? lastYear;
 
-        final descriptions = <String>[];
-        for (var d in distribution) {
-          final monthIndex = (d['month'] as int) - 1;
-          if (monthIndex >= 0 && monthIndex < monthNames.length) {
-            final monthName = monthNames[monthIndex];
-            // Si es partial, agregamos "abono"
-            if (d['new_status'] == 'paid') {
-              descriptions.add(monthName);
-            } else {
-              descriptions.add('abono $monthName');
-            }
-          }
-        }
+      for (var d in distribution) {
+        final monthIndex = (d['month'] as int) - 1;
+        final year = d['year'] as int;
+        firstYear ??= year;
+        lastYear = year;
 
-        if (descriptions.length == 1) {
-          monthsDetail = descriptions.first;
-        } else if (descriptions.length > 1) {
-          final last = descriptions.removeLast();
-          monthsDetail = '${descriptions.join(", ")} y $last';
+        if (monthIndex >= 0 && monthIndex < monthNames.length) {
+          final monthName = monthNames[monthIndex];
+          final needsYear = firstYear != lastYear;
+          final label = d['new_status'] == 'paid' ? monthName : 'abono $monthName';
+          descriptions.add(needsYear ? '$label $year' : label);
         }
       }
 
-      // 1. Enviar correo al usuario
-      final userEmailSent = await _emailService.sendPaymentConfirmationNotification(
-        userEmail: widget.user.email!,
+      String monthsDetail;
+      if (descriptions.length == 1) {
+        monthsDetail = descriptions.first;
+      } else {
+        final last = descriptions.removeLast();
+        monthsDetail = '${descriptions.join(", ")} y $last';
+      }
+
+      final paymentYear = firstYear ?? DateTime.now().year;
+
+      final userEmail = widget.user.email;
+      final hasValidEmail = userEmail != null && userEmail.isNotEmpty;
+
+      final emailSent = await _emailService.sendPaymentConfirmationNotification(
+        userEmail: hasValidEmail ? userEmail : 'tesoreriasextacompania@gmail.com',
         userName: widget.user.fullName,
         paidAmount: amount,
         paymentDate: _dateFormat.format(_paymentDate),
@@ -736,16 +731,13 @@ class _PaymentAmountDialogState extends State<_PaymentAmountDialog> {
         year: paymentYear,
       );
 
-      if (userEmailSent) {
-        print('✅ Correo enviado al usuario: ${widget.user.email}');
+      if (emailSent) {
+        print('✅ Correo de pago enviado correctamente');
       } else {
-        print('⚠️ No se pudo enviar correo al usuario');
+        print('⚠️ No se pudo enviar correo de pago');
       }
-
-      print('✅ Correos de pago procesados (tesorería recibe CC automático)');
     } catch (e) {
       print('⚠️ Error enviando correos de pago: $e');
-      // No bloqueamos el flujo si falla el envío de correos
     }
   }
 

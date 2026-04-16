@@ -5,6 +5,7 @@ import 'package:sexta_app/models/user_model.dart';
 import 'package:sexta_app/services/guard_attendance_service.dart';
 import 'package:sexta_app/services/user_service.dart';
 import 'package:sexta_app/widgets/app_drawer.dart';
+import 'package:sexta_app/services/auth_service.dart';
 
 class ManageGuardAttendanceScreen extends StatefulWidget {
   const ManageGuardAttendanceScreen({Key? key}) : super(key: key);
@@ -156,9 +157,9 @@ class _ManageGuardAttendanceScreenState
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           tabs: const [
+            Tab(icon: Icon(Icons.nightlight_round), text: 'Nocturna'),
             Tab(icon: Icon(Icons.wb_sunny), text: 'FDS'),
             Tab(icon: Icon(Icons.light_mode), text: 'Diurna'),
-            Tab(icon: Icon(Icons.nightlight_round), text: 'Nocturna'),
           ],
         ),
         actions: [
@@ -173,9 +174,9 @@ class _ManageGuardAttendanceScreenState
       body: TabBarView(
         controller: _tabController,
         children: [
+          _buildNocturnaTab(),
           _buildFdsTab(),
           _buildDiurnaTab(),
-          _buildNocturnaTab(),
         ],
       ),
     );
@@ -334,6 +335,7 @@ class _ManageGuardAttendanceScreenState
             icon: const Icon(Icons.add),
             label: const Text('Nueva Nocturna'),
             backgroundColor: Colors.indigo,
+            foregroundColor: Colors.white,
           ),
         ),
       ],
@@ -410,7 +412,7 @@ class _ManageGuardAttendanceScreenState
         title: Text(DateFormat('EEEE dd/MM/yyyy', 'es_ES').format(r.guardDate),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         subtitle: Text('${r.assignedCount} personas • '
-            '${DateFormat('dd/MM HH:mm').format(r.createdAt)}'),
+            '${DateFormat('dd/MM HH:mm').format(r.createdAt.toLocal())}'),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -433,6 +435,12 @@ class _ManageGuardAttendanceScreenState
                           fontSize: 12, fontStyle: FontStyle.italic)),
                 ],
                 const SizedBox(height: 8),
+                _auditInfo(
+                  createdById: r.createdBy,
+                  createdAt: r.createdAt,
+                  modifiedById: r.modifiedBy,
+                  updatedAt: r.updatedAt,
+                ),
                 _actionRow(
                   onEdit: () => _editFds(r),
                   onDelete: () => _deleteFds(r),
@@ -457,7 +465,7 @@ class _ManageGuardAttendanceScreenState
         title: Text(DateFormat('EEEE dd/MM/yyyy', 'es_ES').format(r.guardDate),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         subtitle: Text('${r.assignedCount} personas • '
-            '${DateFormat('dd/MM HH:mm').format(r.createdAt)}'),
+            '${DateFormat('dd/MM HH:mm').format(r.createdAt.toLocal())}'),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -480,6 +488,12 @@ class _ManageGuardAttendanceScreenState
                           fontSize: 12, fontStyle: FontStyle.italic)),
                 ],
                 const SizedBox(height: 8),
+                _auditInfo(
+                  createdById: r.createdBy,
+                  createdAt: r.createdAt,
+                  modifiedById: r.modifiedBy,
+                  updatedAt: r.updatedAt,
+                ),
                 _actionRow(
                   onEdit: () => _editDiurna(r),
                   onDelete: () => _deleteDiurna(r),
@@ -503,7 +517,7 @@ class _ManageGuardAttendanceScreenState
         title: Text(DateFormat('EEEE dd/MM/yyyy', 'es_ES').format(r.guardDate),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         subtitle: Text('${r.assignedCount} personas • '
-            '${DateFormat('dd/MM HH:mm').format(r.createdAt)}'),
+            '${DateFormat('dd/MM HH:mm').format(r.createdAt.toLocal())}'),
         onExpansionChanged: (open) async {
           if (open && !_nocturnaDetails.containsKey(r.id)) {
             try {
@@ -529,6 +543,12 @@ class _ManageGuardAttendanceScreenState
                           fontSize: 12, fontStyle: FontStyle.italic)),
                 ],
                 const SizedBox(height: 8),
+                _auditInfo(
+                  createdById: r.createdBy,
+                  createdAt: r.createdAt,
+                  modifiedById: r.modifiedBy,
+                  updatedAt: r.updatedAt,
+                ),
                 _actionRow(
                   onEdit: () => _editNocturna(r),
                   onDelete: () => _deleteNocturna(r),
@@ -578,6 +598,30 @@ class _ManageGuardAttendanceScreenState
           return _positionRowExtra(
               'Bombero ${i + 1}', id, statusIcon(id, 'bombero'));
         }),
+      ],
+    );
+  }
+
+  Widget _auditInfo({
+    required String? createdById,
+    required DateTime createdAt,
+    required String? modifiedById,
+    required DateTime updatedAt,
+  }) {
+    final fmtFull = DateFormat('dd/MM/yy HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Text(
+          '✏️ Creado por: ${_userName(createdById)} (${fmtFull.format(createdAt.toLocal())})',
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
+        ),
+        if (modifiedById != null)
+          Text(
+            '✏️ Editado por: ${_userName(modifiedById)} (${fmtFull.format(updatedAt.toLocal())})',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
       ],
     );
   }
@@ -1061,6 +1105,7 @@ class _ManageGuardAttendanceScreenState
         'obac_id': obac,
         for (int i = 0; i < 10; i++) 'bombero_${i + 1}_id': bomberos[i],
         'observations': obsCtrl.text.trim().isEmpty ? null : obsCtrl.text.trim(),
+        'modified_by': AuthService().currentUser?.id,
       });
       _snack('✅ Registro actualizado');
       _loadFds();
@@ -1122,6 +1167,7 @@ class _ManageGuardAttendanceScreenState
         'obac_id': obac,
         for (int i = 0; i < 10; i++) 'bombero_${i + 1}_id': bomberos[i],
         'observations': obsCtrl.text.trim().isEmpty ? null : obsCtrl.text.trim(),
+        'modified_by': AuthService().currentUser?.id,
       });
       _snack('✅ Registro actualizado');
       _loadDiurna();
@@ -1180,6 +1226,7 @@ class _ManageGuardAttendanceScreenState
         'obac_id': obac,
         for (int i = 0; i < 8; i++) 'bombero_${i + 1}_id': bomberos[i],
         'observations': obsCtrl.text.trim().isEmpty ? null : obsCtrl.text.trim(),
+        'modified_by': AuthService().currentUser?.id,
       });
       _snack('✅ Registro actualizado');
       _nocturnaDetails.remove(r.id);

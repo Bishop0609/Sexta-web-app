@@ -70,7 +70,7 @@ class GuardRosterService {
     String guardType = 'nocturna',
     String? shiftPeriod,
   }) async {
-    final weekEnd = weekStart.add(const Duration(days: 6));
+    final weekEnd = DateTime(weekStart.year, weekStart.month, weekStart.day + 6);
 
     var query = _supabase
         .from(AppConstants.guardAvailabilityTable)
@@ -397,7 +397,7 @@ class GuardRosterService {
     required DateTime weekStart,
     required List<UserModel> allUsers,
   }) async {
-    final weekEnd = weekStart.add(const Duration(days: 6));
+    final weekEnd = DateTime(weekStart.year, weekStart.month, weekStart.day + 6);
     final dailyRosters = <GuardRosterDaily>[];
 
     // Get availability for the week
@@ -411,7 +411,7 @@ class GuardRosterService {
 
     // Process each day
     for (int i = 0; i < 7; i++) {
-      final currentDate = weekStart.add(Duration(days: i));
+      final currentDate = DateTime(weekStart.year, weekStart.month, weekStart.day + i);
       final dateKey = DateTime(currentDate.year, currentDate.month, currentDate.day);
       
       // Buscar disponibilidad comparando solo fecha
@@ -544,7 +544,7 @@ class GuardRosterService {
   /// Get Sunday of the week for a given date
   DateTime getWeekEnd(DateTime date) {
     final weekStart = getWeekStart(date);
-    return weekStart.add(const Duration(days: 6));
+    return DateTime(weekStart.year, weekStart.month, weekStart.day + 6);
   }
 
   /// Check if user has already registered for a date

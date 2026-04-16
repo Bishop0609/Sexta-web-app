@@ -27,7 +27,13 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isSubmitting = false;
-  
+
+  // Tipo de permiso
+  String _tipoPermiso = 'fecha'; // 'fecha' o 'actividad'
+  List<Map<String, dynamic>> _actividadesFuturas = [];
+  Map<String, dynamic>? _selectedActividad;
+  bool _isLoadingActividades = false;
+
   // Archivo adjunto
   AttachmentFile? _attachedFile;
   String? _attachedFileName;
@@ -66,11 +72,42 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
   }
 
   int _calculatePermissionDays() {
+    if (_tipoPermiso == 'actividad') return 1;
     if (_startDate == null || _endDate == null) return 0;
-    
-    // Días inclusivos: incluye primer y último día
     final difference = _endDate!.difference(_startDate!).inDays;
-    return difference + 1; // +1 para incluir ambos días
+    return difference + 1;
+  }
+
+  Future<void> _loadActividadesFuturas() async {
+    setState(() => _isLoadingActividades = true);
+    try {
+      final result = await _supabase.client.rpc('get_actividades_futuras_con_permisos');
+      final allActividades = List<Map<String, dynamic>>.from(result as List);
+
+      final asistenciasTomadas = await _supabase.client
+          .from('attendance_events')
+          .select('actividad_id')
+          .not('actividad_id', 'is', null);
+
+      final tomadasSet = (asistenciasTomadas as List)
+          .map((e) => e['actividad_id'] as String)
+          .toSet();
+
+      setState(() {
+        _actividadesFuturas = allActividades
+            .where((a) => !tomadasSet.contains(a['id']))
+            .toList();
+        _isLoadingActividades = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingActividades = false);
+      _showError('Error cargando actividades: $e');
+    }
+  }
+
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _selectAttachment(String source) async {
@@ -206,97 +243,125 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
 
   Future<void> _submitPermission() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_startDate == null || _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor seleccione las fechas')),
-      );
-      return;
-    }
 
-    // Calcular días y mostrar advertencia si aplica
-    final days = _calculatePermissionDays();
-    if (days >= 15) {
-      final shouldContinue = await _showApprovalWarningDialog(days);
-      if (!shouldContinue) return; // Usuario canceló
+    final userId = _authService.currentUserId;
+    if (userId == null) throw Exception('Usuario no autenticado');
+
+    if (_tipoPermiso == 'fecha') {
+      if (_startDate == null || _endDate == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Por favor seleccione las fechas')),
+        );
+        return;
+      }
+      final days = _calculatePermissionDays();
+      if (days >= 15) {
+        final shouldContinue = await _showApprovalWarningDialog(days);
+        if (!shouldContinue) return;
+      }
+    } else {
+      if (_selectedActividad == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Por favor seleccione una actividad')),
+        );
+        return;
+      }
     }
 
     setState(() => _isSubmitting = true);
 
     try {
-      final userId = _authService.currentUserId;
-      if (userId == null) throw Exception('Usuario no autenticado');
-
-      // Obtener perfil del usuario
       final userProfile = await _supabase.getUserProfile(userId);
       if (userProfile == null) throw Exception('Perfil no encontrado');
 
-      // Subir archivo adjunto si existe
-      String? attachmentPath;
-      if (_attachedFile != null) {
-        try {
-          // Primero crear el permiso para obtener el ID
-          final permissionData = {
-            'user_id': userId,
-            'start_date': _startDate!.toIso8601String().split('T')[0],
-            'end_date': _endDate!.toIso8601String().split('T')[0],
-            'reason': _reasonController.text.trim(),
-            'status': 'pending',
-            'created_at': DateTime.now().toIso8601String(),
-          };
-          
-          final createdPermission = await _supabase.createPermission(permissionData);
-          final permissionId = createdPermission['id'] as String;
-          
-          // Subir archivo con el ID del permiso
-          attachmentPath = await _storageService.uploadPermissionAttachment(
-            _attachedFile!,
-            permissionId,
-            userId,
-          );
-          
-          // Actualizar permiso con la ruta del archivo
-          await _supabase.updatePermission(permissionId, {
-            'attachment_path': attachmentPath,
-          });
-        } catch (e) {
-          throw Exception('Error subiendo archivo adjunto: $e');
-        }
+      final reason = _reasonController.text.trim();
+      final baseData = <String, dynamic>{
+        'user_id': userId,
+        'reason': reason,
+        'status': 'pending',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      if (_tipoPermiso == 'fecha') {
+        baseData['start_date'] = _startDate!.toIso8601String().split('T')[0];
+        baseData['end_date'] = _endDate!.toIso8601String().split('T')[0];
+        baseData['tipo_permiso'] = 'fecha';
+        baseData['aprobador_tipo'] = 'capitan';
       } else {
-        // Crear solicitud sin adjunto
-        await _supabase.createPermission({
-          'user_id': userId,
-          'start_date': _startDate!.toIso8601String().split('T')[0],
-          'end_date': _endDate!.toIso8601String().split('T')[0],
-          'reason': _reasonController.text.trim(),
-          'status': 'pending',
-          'created_at': DateTime.now().toIso8601String(),
-        });
+        baseData['tipo_permiso'] = 'actividad';
+        baseData['actividad_id'] = _selectedActividad!['id'];
+        baseData['aprobador_tipo'] = _selectedActividad!['aprobador'];
       }
 
-      final startDateFormatted = DateFormat('dd/MM/yyyy').format(_startDate!);
-      final endDateFormatted = DateFormat('dd/MM/yyyy').format(_endDate!);
-      final reason = _reasonController.text.trim();
+      String? permissionId;
+      if (_attachedFile != null) {
+        final createdPermission = await _supabase.createPermission(baseData);
+        permissionId = createdPermission['id'] as String;
+        final attachmentPath = await _storageService.uploadPermissionAttachment(
+          _attachedFile!,
+          permissionId,
+          userId,
+        );
+        await _supabase.updatePermission(permissionId, {'attachment_path': attachmentPath});
+      } else {
+        await _supabase.createPermission(baseData);
+      }
 
-      // Enviar email de confirmación al solicitante
+      // Emails
+      if (_tipoPermiso == 'fecha') {
+        final startDateFormatted = DateFormat('dd/MM/yyyy').format(_startDate!);
+        final endDateFormatted = DateFormat('dd/MM/yyyy').format(_endDate!);
+        
+        await _emailService.sendPermissionRequestNotification(
+          officerEmail: ['capitan6@bomberosdecoquimbo.cl'],
+          firefighterName: userProfile.fullName,
+          startDate: startDateFormatted,
+          endDate: endDateFormatted,
+          reason: reason,
+        );
+      } else {
+        final emailsActividad = _selectedActividad!['emails'] as List?;
+        final oficialEmails = (emailsActividad != null && emailsActividad.isNotEmpty)
+            ? List<String>.from(emailsActividad)
+            : ['capitan6@bomberosdecoquimbo.cl'];
+        final actividadFecha = _selectedActividad!['activity_date'] as String? ?? '';
+        final actividadNombre = _selectedActividad!['title'] as String? ?? '';
+        final aprobador = _selectedActividad!['aprobador'] as String? ?? 'capitan';
+        
+        await _emailService.sendPermissionRequestNotification(
+          officerEmail: oficialEmails,
+          firefighterName: userProfile.fullName,
+          startDate: '', // No aplica
+          endDate: '', // No aplica
+          reason: reason,
+          activityName: actividadNombre,
+          activityDate: actividadFecha,
+          aprobadorTipo: aprobador,
+        );
+      }
+
+      // Email de confirmación al solicitante (Siempre)
       if (userProfile.email != null && userProfile.email!.isNotEmpty) {
+        String startDateFormatted = '';
+        String endDateFormatted = '';
+        if (_tipoPermiso == 'fecha' && _startDate != null && _endDate != null) {
+          startDateFormatted = DateFormat('dd/MM/yyyy').format(_startDate!);
+          endDateFormatted = DateFormat('dd/MM/yyyy').format(_endDate!);
+        }
+        
         await _emailService.sendPermissionSubmittedConfirmation(
           userEmail: userProfile.email!,
           firefighterName: userProfile.fullName,
           startDate: startDateFormatted,
           endDate: endDateFormatted,
           reason: reason,
+          activityName: _tipoPermiso == 'actividad' ? (_selectedActividad?['title'] as String?) : null,
+          activityDate: _tipoPermiso == 'actividad' && _selectedActividad?['activity_date'] != null
+              ? DateFormat('dd/MM/yyyy').format(DateTime.parse(_selectedActividad!['activity_date']))
+              : null,
+          aprobadorTipo: _tipoPermiso == 'actividad' ? (_selectedActividad?['aprobador'] as String?) : null,
         );
       }
-
-      // Enviar email de notificación a oficiales
-      // TODO: Obtener emails de oficiales desde BD
-      await _emailService.sendPermissionRequestNotification(
-        officerEmail: ['gunthersoft.apps@gmail.com'], // Lista de emails temporales de prueba
-        firefighterName: userProfile.fullName,
-        startDate: startDateFormatted,
-        endDate: endDateFormatted,
-        reason: reason,
-      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -305,13 +370,12 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
             backgroundColor: AppTheme.efectivaColor,
           ),
         );
-        
-        // Limpiar formulario
         _formKey.currentState!.reset();
         _reasonController.clear();
         setState(() {
           _startDate = null;
           _endDate = null;
+          _selectedActividad = null;
         });
       }
     } catch (e) {
@@ -321,9 +385,7 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -351,77 +413,195 @@ class _RequestPermissionScreenState extends State<RequestPermissionScreen> {
                         'Nueva Solicitud de Permiso',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
+                      const SizedBox(height: 20),
+
+                      // SegmentedButton tipo permiso
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'fecha',
+                            label: Text('Por Fechas'),
+                            icon: Icon(Icons.date_range),
+                          ),
+                          ButtonSegment(
+                            value: 'actividad',
+                            label: Text('Por Actividad'),
+                            icon: Icon(Icons.event),
+                          ),
+                        ],
+                        selected: {_tipoPermiso},
+                        style: ButtonStyle(
+                          backgroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return AppTheme.institutionalRed;
+                            }
+                            return null;
+                          }),
+                          foregroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Colors.white;
+                            }
+                            return null;
+                          }),
+                        ),
+                        onSelectionChanged: (val) {
+                          setState(() {
+                            _tipoPermiso = val.first;
+                            if (_tipoPermiso == 'actividad' && _actividadesFuturas.isEmpty) {
+                              _loadActividadesFuturas();
+                            }
+                          });
+                        },
+                      ),
                       const SizedBox(height: 24),
-                      
-                      // Fecha inicio
-                      Text(
-                        'Fecha de Inicio',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () => _selectDate(context, true),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.calendar_today, size: 20),
-                              const SizedBox(width: 12),
-                              Text(
-                                _startDate != null
-                                    ? DateFormat('dd/MM/yyyy').format(_startDate!)
-                                    : 'Seleccionar fecha',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: _startDate != null
-                                      ? Colors.black87
-                                      : Colors.grey,
+
+                      // Sección fechas o actividad (condicional)
+                      if (_tipoPermiso == 'fecha') ...[
+                        // Fecha inicio
+                        Text('Fecha de Inicio', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () => _selectDate(context, true),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today, size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _startDate != null
+                                      ? DateFormat('dd/MM/yyyy').format(_startDate!)
+                                      : 'Seleccionar fecha',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _startDate != null ? Colors.black87 : Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // Fecha fin
-                      Text(
-                        'Fecha de Término',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () => _selectDate(context, false),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.calendar_today, size: 20),
-                              const SizedBox(width: 12),
-                              Text(
-                                _endDate != null
-                                    ? DateFormat('dd/MM/yyyy').format(_endDate!)
-                                    : 'Seleccionar fecha',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: _endDate != null
-                                      ? Colors.black87
-                                      : Colors.grey,
+                        const SizedBox(height: 20),
+                        // Fecha fin
+                        Text('Fecha de Término', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () => _selectDate(context, false),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today, size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _endDate != null
+                                      ? DateFormat('dd/MM/yyyy').format(_endDate!)
+                                      : 'Seleccionar fecha',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _endDate != null ? Colors.black87 : Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 20),
+                      ] else ...[
+                        // Selector de actividad
+                        Text('Actividad', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        if (_isLoadingActividades)
+                          const Center(child: CircularProgressIndicator())
+                        else if (_actividadesFuturas.isEmpty)
+                          Text('No hay actividades futuras disponibles.', style: TextStyle(color: Colors.grey[600]))
+                        else
+                          DropdownButtonFormField<Map<String, dynamic>>(
+                            value: _selectedActividad,
+                            isExpanded: true,
+                            decoration: const InputDecoration(border: OutlineInputBorder()),
+                            hint: const Text('Seleccionar actividad'),
+                            items: _actividadesFuturas.map((act) {
+                              final actTypeName = act['act_type_name'] as String? ?? '';
+                              String emoji = '📅';
+                              if (actTypeName == 'Academia de Compañía' || actTypeName == 'Academia de Cuerpo') {
+                                emoji = '📚';
+                              } else if (actTypeName == 'Reunión Ordinaria' || actTypeName == 'Reunión Extraordinaria') {
+                                emoji = '🤝';
+                              } else if (actTypeName == 'Citación de Compañía' || actTypeName == 'Citación de Cuerpo') {
+                                emoji = '📢';
+                              }
+
+                              final dateStr = act['activity_date'] as String?;
+                              String fechaStr = '';
+                              if (dateStr != null && dateStr.isNotEmpty) {
+                                try {
+                                  final dateObj = DateTime.parse(dateStr);
+                                  fechaStr = DateFormat('dd/MMM', 'es_ES').format(dateObj);
+                                } catch (_) {}
+                              }
+                              
+                              final titulo = act['title'] as String? ?? '';
+                              return DropdownMenuItem(
+                                value: act,
+                                child: Text('$emoji $fechaStr — $titulo', overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedActividad = val),
+                          ),
+                        if (_selectedActividad != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.institutionalRed.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.institutionalRed.withOpacity(0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.calendar_today, size: 16),
+                                    const SizedBox(width: 8),
+                                    Builder(builder: (context) {
+                                      final dateStr = _selectedActividad!['activity_date'] as String?;
+                                      String fechaStr = '-';
+                                      if (dateStr != null && dateStr.isNotEmpty) {
+                                         try {
+                                           final dateObj = DateTime.parse(dateStr);
+                                           fechaStr = DateFormat('dd/MM/yyyy').format(dateObj); // Mostrar completa aquí
+                                         } catch (_) {}
+                                      }
+                                      return Text('Fecha: $fechaStr');
+                                    }),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.person_outline, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Aprobador: ${_selectedActividad!['aprobador'] == 'capitan' ? 'Capitán' : 'Director'}',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                      ],
 
                       // Archivo Adjunto (Opcional)
                       Row(

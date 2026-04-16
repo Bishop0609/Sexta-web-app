@@ -1,7 +1,7 @@
 /// Constantes de configuración de la aplicación
 class AppConstants {
   // ── VERSIÓN DE LA APP ── cambiar aquí al publicar nueva versión
-  static const String appVersion = 'V.01.09';
+  static const String appVersion = 'V.01.15';
 
   // Configuración de Supabase (placeholder - usuario debe configurar)
   static const String supabaseUrl = String.fromEnvironment(

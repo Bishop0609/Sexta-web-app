@@ -65,58 +65,6 @@ class SupabaseService {
     });
   }
 
-  Future<void> updatePassword(String userId, String newHash) async {
-    await client.from('auth_credentials').update({
-      'password_hash': newHash,
-      'requires_password_change': false,
-      'failed_attempts': 0,
-      'locked_until': null,
-    }).eq('user_id', userId);
-  }
-
-  Future<void> updatePasswordWithReset(String userId, String passwordHash) async {
-    await client.from('auth_credentials').update({
-      'password_hash': passwordHash,
-      'requires_password_change': true,
-      'failed_attempts': 0,
-      'locked_until': null,
-    }).eq('user_id', userId);
-  }
-
-  Future<void> incrementFailedAttempts(String userId) async {
-    // Direct UPDATE to avoid missing RPC function error (PGRST202)
-    final current = await client
-        .from('auth_credentials')
-        .select('failed_attempts')
-        .eq('user_id', userId)
-        .single();
-    
-    final newCount = ((current['failed_attempts'] as int?) ?? 0) + 1;
-    await client.from('auth_credentials').update({
-      'failed_attempts': newCount,
-    }).eq('user_id', userId);
-  }
-
-  Future<void> resetFailedAttempts(String userId) async {
-    await client.from('auth_credentials').update({
-      'failed_attempts': 0,
-      'locked_until': null,
-    }).eq('user_id', userId);
-  }
-
-    Future<void> lockAccount(String userId, {required int minutes}) async {
-    final lockedUntil = DateTime.now().add(Duration(minutes: minutes));
-    await client.from('auth_credentials').update({
-      'locked_until': lockedUntil.toIso8601String(),
-    }).eq('user_id', userId);
-  }
-
-  Future<void> updateLastLogin(String userId) async {
-    await client.from('auth_credentials').update({
-      'last_login': DateTime.now().toIso8601String(),
-    }).eq('user_id', userId);
-  }
-
   // ===========================================================================
   // USER MANAGEMENT
   // ===========================================================================
@@ -140,9 +88,13 @@ class SupabaseService {
     }
   }
 
-  Future<List<UserModel>> getAllUsers() async {
-     try {
-      final response = await client.from('users').select().order('victor_number');
+  Future<List<UserModel>> getAllUsers({bool includeInactive = false}) async {
+    try {
+      var query = client.from('users').select();
+      if (!includeInactive) {
+        query = query.eq('status', 'activo');
+      }
+      final response = await query.order('victor_number');
       return (response as List).map((json) => UserModel.fromJson(json)).toList();
     } catch (e) {
       print('Error getting all users: $e');
@@ -153,6 +105,8 @@ class SupabaseService {
   Future<UserModel> createUser(UserModel user) async {
     final userData = user.toJson();
     userData.remove('id'); // Let Supabase auto-generate UUID
+    userData.remove('created_at'); // Permitir que Postgres asigne NOW()
+    userData.remove('updated_at'); // Permitir que Postgres asigne NOW()
     final response = await client.from('users').insert(userData).select().single();
     return UserModel.fromJson(response);
   }
@@ -161,6 +115,9 @@ class SupabaseService {
     await updateUserProfile(user); 
   }
 
+  /// Actualiza solo los datos de perfil del usuario.
+  /// NO modifica campos de tesorería (payment_start_date, is_student, etc.)
+  /// — esos son responsabilidad exclusiva de TreasuryUserConfigTab.
   Future<void> updateUserProfile(UserModel user) async {
     await client.from('users').update({
       'full_name': user.fullName,
@@ -170,10 +127,6 @@ class SupabaseService {
       'role': user.role.name,
       'victor_number': user.victorNumber,
       'registro_compania': user.registroCompania,
-      'payment_start_date': user.paymentStartDate?.toIso8601String(),
-      'is_student': user.isStudent,
-      'student_start_date': user.studentStartDate?.toIso8601String(),
-      'student_end_date': user.studentEndDate?.toIso8601String(),
       'rut': user.rut,
       'email': user.email,
     }).eq('id', user.id);
@@ -183,17 +136,28 @@ class SupabaseService {
     await client.from('users').delete().eq('id', userId);
   }
 
+  /// Actualiza solo los campos de configuración de tesorería.
+  /// NO modifica datos de perfil (nombre, cargo, rol, etc.)
+  Future<void> updateTreasuryConfig(UserModel user) async {
+    await client.from('users').update({
+      'is_student': user.isStudent,
+      'payment_start_date': user.paymentStartDate?.toIso8601String(),
+      'student_start_date': user.studentStartDate?.toIso8601String(),
+      'student_end_date': user.studentEndDate?.toIso8601String(),
+    }).eq('id', user.id);
+  }
+
   // ===========================================================================
-  // PERMISSIONS (LICENCIAS)
+  // PERMISOS
   // ===========================================================================
 
    Future<List<Map<String, dynamic>>> getPermissionsByUser(String userId) async {
-    return await client.from('permissions').select().eq('user_id', userId).order('created_at', ascending: false);
+    return await client.from('permissions').select('*, user:users!user_id(*), activity:activities!actividad_id(title, activity_date, activity_type)').eq('user_id', userId).order('created_at', ascending: false);
   }
 
   Future<List<Map<String, dynamic>>> getPermissionsByStatus(String status) async {
      return await client.from('permissions')
-     .select('*, user:users!user_id(*)')
+     .select('*, user:users!user_id(*), activity:activities!actividad_id(title, activity_date, activity_type)')
      .eq('status', status)
      .order('created_at', ascending: false);
   }
@@ -222,6 +186,7 @@ class SupabaseService {
       .select()
       .eq('user_id', userId)
       .eq('status', 'approved')
+      .eq('tipo_permiso', 'fecha')
       .lte('start_date', dateStr)
       .gte('end_date', dateStr);
   }
@@ -229,8 +194,9 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getAllActivePermissionsForDate(DateTime date) async {
      final dateStr = DateFormat('yyyy-MM-dd').format(date);
      return await client.from('permissions')
-      .select('*, user:users!user_id(*)')
+      .select('*, user:users!user_id(*), activity:activities!actividad_id(title, activity_date, activity_type)')
       .eq('status', 'approved')
+      .eq('tipo_permiso', 'fecha')
       .lte('start_date', dateStr)
       .gte('end_date', dateStr);
   }
@@ -250,7 +216,7 @@ class SupabaseService {
 
     var query = client
         .from('permissions')
-        .select('*, user:users!user_id(*)')
+        .select('*, user:users!user_id(*), activity:activities!actividad_id(title, activity_date, activity_type)')
         .eq('status', status)
         .or('and(start_date.gte.$startStr,start_date.lte.$endStr),'
             'and(end_date.gte.$startStr,end_date.lte.$endStr),'
@@ -271,6 +237,7 @@ class SupabaseService {
     return await client.from('act_types')
       .select()
       .eq('is_active', true)
+      .order('orden', ascending: true)
       .order('name');
   }
 
@@ -454,6 +421,7 @@ class SupabaseService {
           .from('guard_roster_daily')
           .select('guard_date, maquinista_id, obac_id, bombero_ids, '
                   'roster_week:guard_roster_weekly!roster_week_id(status)')
+          .eq('shift_period', 'NOCTURNA')
           .gte('guard_date', todayStr)
           .lte('guard_date', limitStr)
           .order('guard_date', ascending: true);

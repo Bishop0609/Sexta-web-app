@@ -2,7 +2,7 @@
 enum AttendanceStatus {
   present,
   absent,
-  licencia, // Auto-set cuando hay permiso aprobado
+  permiso, // Auto-set cuando hay permiso aprobado
 }
 
 /// Registro individual de asistencia
@@ -11,7 +11,7 @@ class AttendanceRecordModel {
   final String eventId;
   final String userId;
   final AttendanceStatus status;
-  final bool isLocked; // True si auto-set desde permiso
+  final bool isLocked; // True si fue auto-asignado desde permiso aprobado
   final DateTime? createdAt;
 
   AttendanceRecordModel({

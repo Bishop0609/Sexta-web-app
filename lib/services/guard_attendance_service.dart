@@ -3,6 +3,7 @@ import 'package:sexta_app/core/constants/app_constants.dart';
 import 'package:sexta_app/models/guard_attendance_model.dart';
 import 'package:sexta_app/models/user_model.dart';
 import 'package:sexta_app/services/auth_service.dart';
+import 'package:sexta_app/services/holiday_service.dart';
 
 /// Service for managing guard attendance (FDS, Diurna, Nocturna)
 class GuardAttendanceService {
@@ -26,7 +27,7 @@ class GuardAttendanceService {
     if (userId == null) throw Exception('Usuario no autenticado');
 
     // Validate it's a weekend or holiday
-    if (!isWeekendOrHoliday(guardDate)) {
+    if (!(await isWeekendOrHoliday(guardDate))) {
       throw Exception('Las guardias FDS solo pueden registrarse en fines de semana o feriados');
     }
 
@@ -136,7 +137,7 @@ class GuardAttendanceService {
     if (userId == null) throw Exception('Usuario no autenticado');
 
     // Validate it's a weekday (not weekend or holiday)
-    if (!isWeekday(guardDate)) {
+    if (!(await isWeekday(guardDate))) {
       throw Exception('Las guardias diurnas solo pueden registrarse en días de semana (lunes a viernes, no feriados)');
     }
 
@@ -403,20 +404,22 @@ class GuardAttendanceService {
   }
 
   /// Check if date is weekend or holiday
-  bool isWeekendOrHoliday(DateTime date) {
-    // Weekend check
+  Future<bool> isWeekendOrHoliday(DateTime date) async {
     if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) {
       return true;
     }
-
-    // TODO: Add holiday check from database or configuration
-    // For now, just check weekends
-    return false;
+    final dateStr = date.toIso8601String().split('T')[0];
+    final response = await _supabase
+        .from('holidays')
+        .select('id')
+        .eq('holiday_date', dateStr)
+        .maybeSingle();
+    return response != null;
   }
 
   /// Check if date is weekday (not weekend or holiday)
-  bool isWeekday(DateTime date) {
-    return !isWeekendOrHoliday(date);
+  Future<bool> isWeekday(DateTime date) async {
+    return !(await isWeekendOrHoliday(date));
   }
 
   /// Get guard start date for night guards

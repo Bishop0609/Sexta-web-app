@@ -5,8 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:sexta_app/core/constants/app_constants.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/auth_service.dart';
-import 'package:sexta_app/widgets/app_drawer.dart';
+
 import 'package:sexta_app/providers/user_provider.dart';
+import '../../services/login_gradient_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -70,9 +71,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.lightBackground,
-      body: Center(
-        child: SingleChildScrollView(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: LoginGradientService.getCurrentGradient().colors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 450),
@@ -108,6 +116,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         style: Theme.of(context).textTheme.displayMedium?.copyWith(
                           color: AppTheme.navyBlue,
                           fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        LoginGradientService.getDaysOfServiceText(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppTheme.navyBlue,
+                          fontWeight: FontWeight.w500,
+                          fontSize: (Theme.of(context).textTheme.displayMedium?.fontSize ?? 24) * 0.5,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -220,10 +238,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 16),
                           decoration: BoxDecoration(
-                            color: AppTheme.criticalColor.withOpacity(0.1),
+                            color: AppTheme.criticalColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: AppTheme.criticalColor.withOpacity(0.3),
+                              color: AppTheme.criticalColor.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(
@@ -299,7 +317,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
              ),
            ),
          ),
-       ),
-     );
-   }
- }
+        ),
+      ),
+    );
+  }
+}
+
+

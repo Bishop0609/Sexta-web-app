@@ -1,0 +1,12 @@
+# No cachear index.html, version.json, ni los JS críticos de Flutter
+# Estos archivos cambian en cada deploy y deben revalidarse siempre.
+<FilesMatch "(index\.html|version\.json|main\.dart\.js|flutter_bootstrap\.js|flutter\.js|flutter_service_worker\.js)$">
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+  Header set Pragma "no-cache"
+  Header set Expires "0"
+</FilesMatch>
+
+# Cachear solo assets verdaderamente estáticos (imágenes, fuentes, CSS)
+<FilesMatch "\.(png|jpg|jpeg|ico|woff2|woff|ttf|svg|css)$">
+  Header set Cache-Control "public, max-age=3600"
+</FilesMatch>

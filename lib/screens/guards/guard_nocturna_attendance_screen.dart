@@ -832,6 +832,14 @@ class _GuardNocturnaAttendanceScreenState
                     ),
                   ),
                 ),
+                if (person.role == 'Bombero (Extra)')
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Eliminar guardián extra',
+                    onPressed: () {
+                      setState(() => _personnel.removeAt(index));
+                    },
+                  ),
               ],
             ),
             const SizedBox(height: 12),

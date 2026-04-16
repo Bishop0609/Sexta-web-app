@@ -32,9 +32,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Map<String, dynamic>> _permissions = [];
   List<EPPAssignmentModel> _eppAssignments = [];
 
+  late int _selectedMonth;
+  late int _selectedYear;
+
+  // Genera las 3 opciones del dropdown: mes actual + 2 anteriores
+  List<({int month, int year})> get _monthOptions {
+    final now = DateTime.now();
+    return List.generate(3, (i) {
+      final d = DateTime(now.year, now.month - i, 1);
+      return (month: d.month, year: d.year);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedMonth = now.month;
+    _selectedYear = now.year;
     _loadProfileData();
   }
 
@@ -51,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Load all profile data in parallel
       final results = await Future.wait([
         _supabase.getUserProfile(userId),
-        _attendanceService.getUserAttendanceHistory(userId, 20),
+        _attendanceService.getUserAttendanceHistory(userId, 500),
         _supabase.getPermissionsByUser(userId),
         _eppService.getActiveEPPByUser(userId),
       ]);
@@ -95,7 +110,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 16),
                   _buildEPPCard(),
                   const SizedBox(height: 16),
-                  _buildAttendanceHistoryCard(),
+                  _buildMonthFilter(),
+                  const SizedBox(height: 8),
+                  _buildCitationsHistoryCard(),
+                  const SizedBox(height: 16),
+                  _buildEmergenciesHistoryCard(),
                   const SizedBox(height: 16),
                   _buildPermissionsCard(),
                 ],
@@ -132,6 +151,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildDataRow('Cargo', _user!.rank),
             if (_user!.email != null)
               _buildDataRow('Email', _user!.email!),
+            if (_user!.birthDate != null)
+              _buildDataRow('Fecha de Nacimiento', DateFormat('dd/MM/yyyy').format(_user!.birthDate!)),
+            if (_user!.enrollmentDate != null)
+              _buildDataRow('Ingreso (Juramento)', DateFormat('dd/MM/yyyy').format(_user!.enrollmentDate!)),
+            if (_user!.enrollmentDate != null)
+              _buildDataRow('Años de Servicio', '${DateTime.now().difference(_user!.enrollmentDate!).inDays ~/ 365} años'),
           ],
         ),
       ),
@@ -275,9 +300,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  static const _monthNames = [
+    '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  ];
+
+  Widget _buildMonthFilter() {
+    return Row(
+      children: [
+        const Icon(Icons.calendar_month, size: 18, color: AppTheme.navyBlue),
+        const SizedBox(width: 8),
+        const Text('Filtrar mes:', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(width: 12),
+        DropdownButton<String>(
+          value: '$_selectedYear-$_selectedMonth',
+          isDense: true,
+          items: _monthOptions.map((opt) {
+            return DropdownMenuItem(
+              value: '${opt.year}-${opt.month}',
+              child: Text('${_monthNames[opt.month]} ${opt.year}'),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val == null) return;
+            final parts = val.split('-');
+            setState(() {
+              _selectedYear = int.parse(parts[0]);
+              _selectedMonth = int.parse(parts[1]);
+            });
+          },
+        ),
+      ],
+    );
+  }
 
 
-  Widget _buildAttendanceHistoryCard() {
+  static const _citationTypes = [
+    'Academia de Compañía',
+    'Academia de Cuerpo',
+    'Reunión Ordinaria',
+    'Reunión Extraordinaria',
+    'Citación de Compañía',
+    'Citación de Cuerpo',
+    'Otra Actividad',
+  ];
+
+  Widget _buildAttendanceSection(List<Map<String, dynamic>> records) {
+    if (records.isEmpty) return const Text('Sin registros');
+
+    final sorted = [...records]..sort((a, b) {
+        final da = DateTime.tryParse(a['event_date']?.toString() ?? '') ?? DateTime(0);
+        final db = DateTime.tryParse(b['event_date']?.toString() ?? '') ?? DateTime(0);
+        return db.compareTo(da); // descendente: más recientes arriba, más antiguas abajo
+      });
+
+    return Column(
+      children: sorted.map((record) {
+        final dateStr = record['event_date']?.toString();
+        final date = dateStr != null ? DateTime.tryParse(dateStr) ?? DateTime.now() : DateTime.now();
+        final actType = record['act_type_name']?.toString() ?? 'N/A';
+        final subtype = record['subtype']?.toString();
+        final isEmergency = actType == 'Emergencia';
+        final titleText = (isEmergency && subtype != null && subtype.isNotEmpty)
+            ? '$actType · $subtype'
+            : actType;
+        final status = record['status']?.toString() ?? 'absent';
+
+        final IconData icon;
+        final Color color;
+        final String statusText;
+
+        if (status == 'present') {
+          icon = Icons.check_circle;
+          color = AppTheme.efectivaColor;
+          statusText = 'Presente';
+        } else if (status == 'permiso') {
+          icon = Icons.event_available;
+          color = AppTheme.warningColor;
+          statusText = 'Permiso';
+        } else {
+          icon = Icons.cancel;
+          color = Colors.grey;
+          statusText = 'Ausente';
+        }
+
+        return ListTile(
+          dense: true,
+          leading: Icon(icon, color: color),
+          title: Text(titleText),
+          subtitle: Text(DateFormat('dd/MM/yyyy').format(date)),
+          trailing: Text(
+            statusText,
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCitationsHistoryCard() {
+    final citations = _attendanceHistory.where((r) {
+      if (!_citationTypes.contains(r['act_type_name']?.toString())) return false;
+      final d = DateTime.tryParse(r['event_date']?.toString() ?? '');
+      return d != null && d.month == _selectedMonth && d.year == _selectedYear;
+    }).toList();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -286,51 +413,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.history, color: AppTheme.navyBlue),
+                const Icon(Icons.event_note, color: AppTheme.navyBlue),
                 const SizedBox(width: 8),
                 Text(
-                  'Historial de Asistencias',
+                  'Historial de Asistencias a Citaciones',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ],
             ),
             const Divider(height: 24),
-            if (_attendanceHistory.isEmpty)
-              const Text('No hay registros de asistencia')
-            else
-              ..._attendanceHistory.take(20).map((record) {
-                final date = DateTime.parse(record['event_date']);
-                final actType = record['act_type_name'] ?? 'N/A';
-                final status = record['status'] as String;
-                
-                IconData icon;
-                Color color;
-                String statusText;
-                
-                if (status == 'present') {
-                  icon = Icons.check_circle;
-                  color = AppTheme.efectivaColor;
-                  statusText = 'Presente';
-                } else if (status == 'licencia') {
-                  icon = Icons.medical_services;
-                  color = AppTheme.warningColor;
-                  statusText = 'Licencia';
-                } else {
-                  icon = Icons.cancel;
-                  color = Colors.grey;
-                  statusText = 'Ausente';
-                }
+            _buildAttendanceSection(citations),
+          ],
+        ),
+      ),
+    );
+  }
 
-                return ListTile(
-                  leading: Icon(icon, color: color),
-                  title: Text(actType),
-                  subtitle: Text(DateFormat('dd/MM/yyyy').format(date)),
-                  trailing: Text(
-                    statusText,
-                    style: TextStyle(color: color, fontWeight: FontWeight.bold),
-                  ),
-                );
-              }).toList(),
+  Widget _buildEmergenciesHistoryCard() {
+    final emergencies = _attendanceHistory.where((r) {
+      if (r['act_type_name']?.toString() != 'Emergencia') return false;
+      final d = DateTime.tryParse(r['event_date']?.toString() ?? '');
+      return d != null && d.month == _selectedMonth && d.year == _selectedYear;
+    }).toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.local_fire_department, color: AppTheme.navyBlue),
+                const SizedBox(width: 8),
+                Text(
+                  'Historial de Asistencias a Emergencias',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            _buildAttendanceSection(emergencies),
           ],
         ),
       ),
@@ -359,10 +482,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Text('No hay permisos registrados')
             else
               ..._permissions.map((perm) {
-                final startDate = DateTime.parse(perm['start_date']);
-                final endDate = DateTime.parse(perm['end_date']);
-                final status = perm['status'] as String;
-                final reason = perm['reason'] as String;
+                final startStr = perm['start_date']?.toString();
+                final endStr = perm['end_date']?.toString();
+                final startDate = startStr != null ? DateTime.tryParse(startStr) ?? DateTime.now() : DateTime.now();
+                final endDate = endStr != null ? DateTime.tryParse(endStr) ?? DateTime.now() : DateTime.now();
+                final status = perm['status']?.toString() ?? 'pending';
+                final reason = perm['reason']?.toString() ?? 'Sin motivo especificado';
 
                 Color statusColor;
                 String statusText;

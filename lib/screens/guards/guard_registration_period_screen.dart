@@ -74,7 +74,7 @@ class _GuardRegistrationPeriodScreenState
       builder: (context) => AlertDialog(
         title: const Text('Abrir Inscripciones'),
         content: Text(
-          '¿Abrir período de inscripción para ${_getMonthName(_nextMonthData!['periodStart'])}?\n\n'
+          '¿Abrir período de inscripción para ${_getMonthName(_nextMonthData!['targetMonth'] ?? _nextMonthData!['periodStart'])}?\n\n'
           'Los bomberos podrán inscribirse desde ahora.',
         ),
         actions: [
@@ -367,7 +367,7 @@ class _GuardRegistrationPeriodScreenState
               children: [
                 Expanded(
                   child: Text(
-                    'Período de Inscripción - ${_getMonthName(periodStart)}',
+                    'Período de Inscripción - ${_getMonthName(_nextMonthData!['targetMonth'] ?? periodStart)}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -435,7 +435,7 @@ class _GuardRegistrationPeriodScreenState
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Lun ${DateFormat('dd', 'es_ES').format(start)} - Dom ${DateFormat('dd', 'es_ES').format(end)}',
+                      'Lun ${DateFormat('dd/MM', 'es_ES').format(start)} - Dom ${DateFormat('dd/MM', 'es_ES').format(end)}',
                       style: const TextStyle(fontSize: 14),
                     ),
                   ],

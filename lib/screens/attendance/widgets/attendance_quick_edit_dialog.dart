@@ -157,11 +157,11 @@ class _AttendanceQuickEditDialogState extends State<AttendanceQuickEditDialog> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Text(
-          '${record['nombre']} ${record['apellido']}',
+          record['user']?['full_name'] as String? ?? 'Sin nombre',
           style: const TextStyle(fontSize: 13),
         ),
         subtitle: Text(
-          record['rango'] as String? ?? '',
+          record['user']?['rank'] as String? ?? '',
           style: const TextStyle(fontSize: 11),
         ),
         trailing: isLocked

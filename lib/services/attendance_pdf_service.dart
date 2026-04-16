@@ -90,7 +90,7 @@ class AttendancePdfService {
         children: [
           _buildTotalItem('Presentes', totals['present'] ?? 0, PdfColors.green),
           _buildTotalItem('Ausentes', totals['absent'] ?? 0, PdfColors.red),
-          _buildTotalItem('Con Permiso', totals['licencia'] ?? 0, PdfColors.orange),
+          _buildTotalItem('Con Permiso', totals['permiso'] ?? 0, PdfColors.orange),
         ],
       ),
     );
@@ -192,7 +192,7 @@ class AttendancePdfService {
     switch (status) {
       case 'present': return 'Presente';
       case 'absent': return 'Ausente';
-      case 'licencia': return 'Con Permiso';
+      case 'permiso': return 'Con Permiso';
       default: return status;
     }
   }

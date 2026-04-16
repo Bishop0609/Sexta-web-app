@@ -6,11 +6,6 @@ const corsHeaders = {
 }
 const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
-// Direcciones institucionales para CC en correos de permisos
-const PERMISSION_CC_EMAILS = [
-  'capitan6@bomberosdecoquimbo.cl',
-  'ayudantia@sextacoquimbo.cl'
-]
 // Dirección de tesorería para CC en correos de pagos
 const TREASURY_CC_EMAIL = 'tesoreriasextacompania@gmail.com'
 interface EmailRequest {
@@ -22,6 +17,7 @@ interface EmailContent {
   subject: string
   html: string
   cc?: string[]
+  bcc?: string[]
 }
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -62,6 +58,10 @@ serve(async (req) => {
     if (emailContent.cc && emailContent.cc.length > 0) {
       brevoPayload.cc = emailContent.cc.map((email: string) => ({ email }))
     }
+    // Add BCC if defined
+    if (emailContent.bcc && emailContent.bcc.length > 0) {
+      brevoPayload.bcc = emailContent.bcc.map((email: string) => ({ email }))
+    }
     // Send email via Brevo
     const brevoResponse = await fetch(BREVO_API_URL, {
       method: 'POST',
@@ -101,27 +101,43 @@ function generateEmailContent(type: string, data: Record<string, any>): EmailCon
         html: generatePermissionSubmittedHTML(data),
         // Sin CC - solo confirmación personal al solicitante
       }
-    case 'permission_review':
+    case 'permission_review': {
+      const isDirector = data.aprobadorTipo === 'director';
+      const toEmail = isDirector ? ['director6@bomberosdecoquimbo.cl'] : ['capitan6@bomberosdecoquimbo.cl'];
+      const ccEmail = isDirector 
+        ? ['secretario6@bomberosdecoquimbo.cl', 'gunthersoft.apps@gmail.com'] 
+        : ['ayudantia@sextacoquimbo.cl', 'gunthersoft.apps@gmail.com'];
       return {
-        to: data.officerEmail,
+        to: toEmail,
         subject: `Nueva Solicitud de Permiso - ${data.firefighterName}`,
         html: generatePermissionReviewHTML(data),
-        cc: PERMISSION_CC_EMAILS  // CC a Capitán y Ayudantía
+        cc: ccEmail
       }
-    case 'permission_approved':
+    }
+    case 'permission_approved': {
+      const isDirector = data.aprobadorTipo === 'director';
+      const ccEmail = isDirector 
+        ? ['secretario6@bomberosdecoquimbo.cl', 'gunthersoft.apps@gmail.com'] 
+        : ['ayudantia@sextacoquimbo.cl', 'gunthersoft.apps@gmail.com'];
       return {
         to: data.firefighterEmail,
         subject: 'Solicitud de Permiso APROBADA',
         html: generatePermissionDecisionHTML(data, true),
-        cc: PERMISSION_CC_EMAILS  // CC a Capitán y Ayudantía
+        cc: ccEmail
       }
-    case 'permission_rejected':
+    }
+    case 'permission_rejected': {
+      const isDirector = data.aprobadorTipo === 'director';
+      const ccEmail = isDirector 
+        ? ['secretario6@bomberosdecoquimbo.cl', 'gunthersoft.apps@gmail.com'] 
+        : ['ayudantia@sextacoquimbo.cl', 'gunthersoft.apps@gmail.com'];
       return {
         to: data.firefighterEmail,
         subject: 'Solicitud de Permiso RECHAZADA',
         html: generatePermissionDecisionHTML(data, false),
-        cc: PERMISSION_CC_EMAILS  // CC a Capitán y Ayudantía
+        cc: ccEmail
       }
+    }
     // =====================================================
     // MÓDULO ACTIVIDADES
     // =====================================================
@@ -153,12 +169,13 @@ function generateEmailContent(type: string, data: Record<string, any>): EmailCon
     // MÓDULO TESORERÍA
     // =====================================================
     case 'payment_confirmation':
-      return {
+    return {
         to: data.userEmail,
         subject: `Pago Registrado - ${data.month} ${data.year}`,
         html: generatePaymentConfirmationHTML(data),
-        cc: [TREASURY_CC_EMAIL]  // CC a Tesorería
-      }
+        cc: [TREASURY_CC_EMAIL, 'tesoreria@sextacoquimbo.cl'],
+        bcc: ['gunthersoft.apps@gmail.com']
+    }
     // =====================================================
     // MÓDULO ASISTENCIAS
     // =====================================================
@@ -212,7 +229,11 @@ function generatePermissionSubmittedHTML(data: any): string {
     <p>Tu solicitud de permiso ha sido recibida correctamente y está siendo revisada.</p>
     <p><strong>Detalles:</strong></p>
     <ul>
-      <li><strong>Período:</strong> ${data.startDate} - ${data.endDate}</li>
+      ${data.activityName 
+        ? `<li><strong>Actividad:</strong> ${data.activityName} — ${data.activityDate}</li>
+           <li><strong>Aprobador:</strong> ${data.aprobadorTipo === 'capitan' ? 'Capitán' : 'Director'}</li>`
+        : `<li><strong>Período:</strong> ${data.startDate} - ${data.endDate}</li>`
+      }
       <li><strong>Motivo:</strong> ${data.reason}</li>
     </ul>
     <p>Recibirás una notificación cuando tu solicitud sea revisada.</p>
@@ -255,13 +276,14 @@ function generatePermissionReviewHTML(data: any): string {
   </div>
   <div class="content">
     <p><strong>Bombero:</strong> ${data.firefighterName}</p>
-    <p><strong>Período:</strong> ${data.startDate} - ${data.endDate}</p>
+    ${data.activityName 
+      ? `<p><strong>Actividad:</strong> ${data.activityName} — ${data.activityDate}</p>
+         <p><strong>Aprobador:</strong> ${data.aprobadorTipo === 'capitan' ? 'Capitán' : 'Director'}</p>`
+      : `<p><strong>Período:</strong> ${data.startDate} - ${data.endDate}</p>`
+    }
     <p><strong>Motivo:</strong></p>
     <p>${data.reason}</p>
   </div>
-  <p style="text-align: center;">
-    <a href="#" class="button">Revisar Solicitud</a>
-  </p>
   <div class="footer">
     <p>Sistema de Gestión Integral - Sexta Compañía</p>
     <p style="font-size: 10px; margin-top: 5px;">Desarrollado por GuntherSOFT, 2026</p>
@@ -318,7 +340,11 @@ function generatePermissionDecisionHTML(data: any, approved: boolean): string {
     <p>${message}</p>
     <p><strong>Detalles de tu solicitud:</strong></p>
     <ul>
-      <li><strong>Período:</strong> ${data.startDate} - ${data.endDate}</li>
+      ${data.activityName 
+        ? `<li><strong>Actividad:</strong> ${data.activityName} — ${data.activityDate}</li>
+           <li><strong>Aprobador:</strong> ${data.aprobadorTipo === 'capitan' ? 'Capitán' : 'Director'}</li>`
+        : `<li><strong>Período:</strong> ${data.startDate} - ${data.endDate}</li>`
+      }
       <li><strong>Motivo:</strong> ${data.reason}</li>
     </ul>
     ${rejectionSection}
@@ -439,7 +465,7 @@ function generateActivityReminderHTML(data: any, hoursBefore: number): string {
 <body>
 <div class="container">
   <div class="header">
-    <h1>🔔 Recordatorio de Actividad</h1>
+    <h1>🔔 Recordatorio de ${data.activityType}</h1>
   </div>
   <div class="content">
     <p>Estimado/a ${data.userName},</p>

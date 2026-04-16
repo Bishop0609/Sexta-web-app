@@ -72,6 +72,7 @@ serve(async (req) => {
         roster_week:guard_roster_weekly!roster_week_id(status)
       `)
       .eq('guard_date', todayStr)
+      .eq('shift_period', 'NOCTURNA')
 
     if (guardsError) {
       console.error('❌ Error buscando guardias:', guardsError)

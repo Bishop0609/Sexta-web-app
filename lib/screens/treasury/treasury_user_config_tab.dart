@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/treasury_service.dart';
+import '../../services/supabase_service.dart';
 import '../../providers/user_provider.dart';
 import '../../core/permissions/role_permissions.dart';
 
@@ -112,7 +113,9 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
       builder: (context) => _TreasuryUserEditDialog(
         user: user,
         onSave: (updatedUser) async {
-          await _userService.updateUser(updatedUser);
+          // Solo actualiza campos de tesorería — no toca datos de perfil
+          final supabaseService = SupabaseService();
+          await supabaseService.updateTreasuryConfig(updatedUser);
           
           // Recalcular cuotas existentes por si cambió configuración de estudiante
           await _treasuryService.recalculateUserQuotas(updatedUser.id);
@@ -144,12 +147,14 @@ class _TreasuryUserConfigTabState extends ConsumerState<TreasuryUserConfigTab> {
 
       if (mounted) {
         if (result['success'] == true) {
+          final quotasUpdated = result['quotas_updated'] ?? 0;
+          final message = quotasUpdated > 0
+              ? '✅ ${user.fullName} promovido/a a Bombero. $quotasUpdated cuotas actualizadas.'
+              : '✅ ${user.fullName} promovido/a a Bombero. Las próximas cuotas se generarán con su nuevo cargo.';
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                '✅ ${user.fullName} promovido a Bombero. '
-                '${result['quotas_updated']} cuotas actualizadas a \$${result['standard_quota']}'
-              ),
+              content: Text(message),
               backgroundColor: AppTheme.efectivaColor,
             ),
           );

@@ -64,6 +64,8 @@ class ActivityModel {
   final DateTime? updatedAt;
   final String? modifiedBy;  // Nuevo campo de auditoría
   final DateTime? modifiedAt;  // Nuevo campo de auditoría
+  final String? actTypeId;
+  final String? aprobadorOverride; // solo para "Otra Actividad", valor: 'capitan' o 'director'
 
   ActivityModel({
     required this.id,
@@ -79,6 +81,8 @@ class ActivityModel {
     this.updatedAt,
     this.modifiedBy,
     this.modifiedAt,
+    this.actTypeId,
+    this.aprobadorOverride,
   });
 
   factory ActivityModel.fromJson(Map<String, dynamic> json) {
@@ -106,6 +110,8 @@ class ActivityModel {
       modifiedAt: json['modified_at'] != null
           ? DateTime.parse(json['modified_at'] as String)
           : null,
+      actTypeId: json['act_type_id'] as String?,
+      aprobadorOverride: json['aprobador_override'] as String?,
     );
   }
 
@@ -126,6 +132,8 @@ class ActivityModel {
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       if (modifiedBy != null) 'modified_by': modifiedBy,
       if (modifiedAt != null) 'modified_at': modifiedAt!.toIso8601String(),
+      if (actTypeId != null) 'act_type_id': actTypeId,
+      if (aprobadorOverride != null) 'aprobador_override': aprobadorOverride,
     };
   }
 
@@ -155,6 +163,8 @@ class ActivityModel {
     DateTime? updatedAt,
     String? modifiedBy,
     DateTime? modifiedAt,
+    String? actTypeId,
+    String? aprobadorOverride,
   }) {
     return ActivityModel(
       id: id ?? this.id,
@@ -170,6 +180,8 @@ class ActivityModel {
       updatedAt: updatedAt ?? this.updatedAt,
       modifiedBy: modifiedBy ?? this.modifiedBy,
       modifiedAt: modifiedAt ?? this.modifiedAt,
+      actTypeId: actTypeId ?? this.actTypeId,
+      aprobadorOverride: aprobadorOverride ?? this.aprobadorOverride,
     );
   }
 }

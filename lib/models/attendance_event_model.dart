@@ -92,14 +92,14 @@ class AttendanceEventModel {
   /// Verifica si la asistencia puede ser editada (< 1 hora y usuario es creador)
   bool canBeEdited(String currentUserId) {
     if (createdAt == null) return false;
-    final hoursSinceCreation = DateTime.now().difference(createdAt!).inHours;
+    final hoursSinceCreation = DateTime.now().toUtc().difference(createdAt!).inHours;
     return hoursSinceCreation < 1 && createdBy == currentUserId;
   }
   
   /// Verifica si está en la ventana de historial (< 2 horas)
   bool isInHistoryWindow() {
     if (createdAt == null) return false;
-    final hoursSinceCreation = DateTime.now().difference(createdAt!).inHours;
+    final hoursSinceCreation = DateTime.now().toUtc().difference(createdAt!).inHours;
     return hoursSinceCreation < 2;
   }
 }

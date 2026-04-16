@@ -6,12 +6,13 @@ class UserService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   /// Obtener todos los usuarios
-  Future<List<UserModel>> getAllUsers() async {
+  Future<List<UserModel>> getAllUsers({bool includeInactive = false}) async {
     try {
-      final response = await _supabase
-          .from('users')
-          .select()
-          .order('full_name');
+      var query = _supabase.from('users').select();
+      if (!includeInactive) {
+        query = query.eq('status', 'activo');
+      }
+      final response = await query.order('full_name');
 
       return (response as List)
           .map((json) => UserModel.fromJson(json))

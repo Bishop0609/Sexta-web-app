@@ -18,6 +18,20 @@ class EmailService {
     required Map<String, dynamic> data,
   }) async {
     try {
+      // No enviar a emails ficticios (excepto payment_confirmation que debe llegar a tesorería)
+      final emailToCheck = data['userEmail'] ?? data['firefighterEmail'] ?? data['officerEmail'] ?? '';
+      final emailStr = emailToCheck is String ? emailToCheck : '';
+      if (emailStr.toLowerCase().endsWith('@noemail.cl')) {
+        if (emailType == 'payment_confirmation') {
+          // Redirigir a tesorería como destinatario principal
+          data['userEmail'] = 'tesoreriasextacompania@gmail.com';
+          print('📤 Email ficticio detectado, redirigiendo confirmación de pago a tesorería');
+        } else {
+          print('⏭️ Saltando email ficticio: $emailStr');
+          return false;
+        }
+      }
+
       print('📤 Enviando email via Edge Function: $emailType');
       print('   Datos: $data');
       
@@ -51,6 +65,12 @@ class EmailService {
     required String htmlContent,
   }) async {
     try {
+      // No enviar a emails ficticios
+      if (to.toLowerCase().endsWith('@noemail.cl')) {
+        print('⏭️ Saltando email ficticio: $to');
+        return false;
+      }
+
       print('📤 Intentando enviar email a: $to');
       print('   From: ${AppConstants.brevoFromEmail}');
       print('   Subject: $subject');
@@ -97,6 +117,9 @@ class EmailService {
     required String startDate,
     required String endDate,
     required String reason,
+    String? activityName,
+    String? activityDate,
+    String? aprobadorTipo,
   }) async {
     // Convertir a lista si es String
     final emails = officerEmail is List ? officerEmail : [officerEmail];
@@ -109,6 +132,9 @@ class EmailService {
         'startDate': startDate,
         'endDate': endDate,
         'reason': reason,
+        if (activityName != null) 'activityName': activityName,
+        if (activityDate != null) 'activityDate': activityDate,
+        if (aprobadorTipo != null) 'aprobadorTipo': aprobadorTipo,
       },
     );
   }
@@ -122,6 +148,9 @@ class EmailService {
     required String endDate,
     required String reason,
     String? rejectionReason,
+    String? activityName,
+    String? activityDate,
+    String? aprobadorTipo,
   }) async {
     return await _sendViaEdgeFunction(
       emailType: approved ? 'permission_approved' : 'permission_rejected',
@@ -132,6 +161,9 @@ class EmailService {
         'endDate': endDate,
         'reason': reason,
         if (rejectionReason != null) 'rejectionReason': rejectionReason,
+        if (activityName != null) 'activityName': activityName,
+        if (activityDate != null) 'activityDate': activityDate,
+        if (aprobadorTipo != null) 'aprobadorTipo': aprobadorTipo,
       },
     );
   }
@@ -143,6 +175,9 @@ class EmailService {
     required String startDate,
     required String endDate,
     required String reason,
+    String? activityName,
+    String? activityDate,
+    String? aprobadorTipo,
   }) async {
     return await _sendViaEdgeFunction(
       emailType: 'permission_submitted',
@@ -152,6 +187,9 @@ class EmailService {
         'startDate': startDate,
         'endDate': endDate,
         'reason': reason,
+        if (activityName != null) 'activityName': activityName,
+        if (activityDate != null) 'activityDate': activityDate,
+        if (aprobadorTipo != null) 'aprobadorTipo': aprobadorTipo,
       },
     );
   }
@@ -252,17 +290,6 @@ Future<bool> sendWelcomeEmail({
     String? location,
     String? description,
   }) async {
-    // Lista de emails genéricos a excluir
-    const excludedEmails = [
-      'notengo@gmail.com',
-      'notiene@gmail.com',
-    ];
-    
-    // No enviar a emails excluidos
-    if (excludedEmails.contains(userEmail.toLowerCase())) {
-      return false;
-    }
-
     // Usar Edge Function en lugar de llamada directa a Brevo
     return await _sendViaEdgeFunction(
       emailType: 'activity_created',
@@ -298,6 +325,57 @@ Future<bool> sendWelcomeEmail({
         'activityTime': activityTime,
       },
     );
+  }
+
+  /// Envía notificación de actividad a múltiples usuarios en background.
+  /// Retorna inmediatamente. Llama onComplete al terminar.
+  Future<void> sendBulkActivityNotification({
+    required List<Map<String, String>> recipients,
+    required bool isNewActivity,
+    required String activityTitle,
+    required String activityType,
+    required String activityDate,
+    String? activityTime,
+    String? location,
+    String? description,
+    void Function(int sent, int failed)? onComplete,
+  }) async {
+    int sent = 0;
+    int failed = 0;
+
+    for (final recipient in recipients) {
+      try {
+        bool success;
+        if (isNewActivity) {
+          success = await sendActivityCreatedNotification(
+            userEmail: recipient['email']!,
+            userName: recipient['name']!,
+            activityTitle: activityTitle,
+            activityType: activityType,
+            activityDate: activityDate,
+            activityTime: activityTime,
+            location: location,
+            description: description,
+          );
+        } else {
+          success = await sendActivityModifiedNotification(
+            userEmail: recipient['email']!,
+            userName: recipient['name']!,
+            activityTitle: activityTitle,
+            activityDate: activityDate,
+            activityTime: activityTime,
+          );
+        }
+        if (success) sent++; else failed++;
+      } catch (e) {
+        failed++;
+        print('❌ Error email a ${recipient['name']}: $e');
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    print('📊 Bulk email: $sent enviados, $failed fallidos');
+    onComplete?.call(sent, failed);
   }
 
   /// Recordatorio de actividad (24h o 48h antes)

@@ -13,13 +13,15 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 /**
  * Ventanas de búsqueda por hora de ejecución (hora Chile, UTC-3):
  * 
- * Cron 1 - 09:00 Chile (12:00 UTC): actividades entre 01:00 y 11:00 Chile
+ * Cron 1 - 09:00 Chile (12:00 UTC): actividades entre 00:00 y 11:00 Chile
  * Cron 2 - 14:00 Chile (17:00 UTC): actividades entre 11:01 y 16:59 Chile
  * Cron 3 - 20:00 Chile (23:00 UTC): actividades entre 17:00 y 23:59 Chile
  * 
  * NOTA: activity_date es solo fecha (sin hora), start_time es campo separado.
  * Se filtran actividades del día siguiente y luego se compara start_time
  * contra la ventana horaria correspondiente.
+ * 
+ * Cobertura completa 00:00-23:59, sin huecos ni superposición.
  */
 function getTimeWindow(now: Date): { startTime: string, endTime: string } {
     const chileHour = (now.getUTCHours() - 3 + 24) % 24
@@ -40,11 +42,8 @@ function getTimeWindow(now: Date): { startTime: string, endTime: string } {
  * Calcula la fecha de "mañana" en zona horaria Chile (UTC-3)
  */
 function getTomorrowDateChile(now: Date): string {
-    // Convertir a hora Chile
     const chileTime = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-    // Sumar un día
     chileTime.setUTCDate(chileTime.getUTCDate() + 1)
-    // Retornar solo la fecha YYYY-MM-DD
     return chileTime.toISOString().split('T')[0]
 }
 
@@ -238,6 +237,7 @@ async function getFilteredUsers(supabase: any, groups: string[]): Promise<any[]>
     const { data: allUsers, error } = await supabase
         .from('users')
         .select('id, full_name, email, role, rank')
+        .eq('status', 'activo')
         .order('full_name')
 
     if (error || !allUsers) {
@@ -302,9 +302,11 @@ function isHonorary(rank: string): boolean {
     return rank.toLowerCase().includes('honorario')
 }
 
+// Omite correos específicos y cualquier correo @noemail.cl (RUTs sin email)
 function isExcludedEmail(email: string): boolean {
     const excluded = ['notengo@gmail.com', 'notiene@gmail.com']
-    return excluded.includes(email.toLowerCase())
+    const emailLower = email.toLowerCase()
+    return excluded.includes(emailLower) || emailLower.endsWith('@noemail.cl')
 }
 
 function formatDate(dateString: string): string {

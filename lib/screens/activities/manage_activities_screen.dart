@@ -8,7 +8,7 @@ import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/services/email_service.dart';
 import 'package:sexta_app/models/activity_model.dart';
 import 'package:sexta_app/models/user_model.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 class ManageActivitiesScreen extends StatefulWidget {
   const ManageActivitiesScreen({super.key});
 
@@ -19,6 +19,7 @@ class ManageActivitiesScreen extends StatefulWidget {
 class _ManageActivitiesScreenState extends State<ManageActivitiesScreen> {
   final _supabase = SupabaseService();
   final _authService = AuthService();
+  final _emailService = EmailService();
   List<Map<String, dynamic>> _activities = [];
   List<UserModel> _allUsers = [];  // Para mostrar nombres de creadores/editores
   bool _isLoading = true;
@@ -260,7 +261,68 @@ class _ManageActivitiesScreenState extends State<ManageActivitiesScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        await _supabase.deleteActivity(activity['id']);
+        final actividadId = activity['id'] as String;
+        final actividadDate = activity['activity_date'] as String? ?? DateTime.now().toIso8601String().split('T')[0];
+
+        // Obtener todos los permisos vinculados a esta actividad
+        final permisos = await _supabase.client
+            .from('permissions')
+            .select('id, status, reason, start_date, end_date, user:users!user_id(id, full_name, email)')
+            .eq('actividad_id', actividadId);
+
+        for (final permiso in permisos as List) {
+          final status = permiso['status'] as String;
+          final permisoId = permiso['id'] as String;
+          final user = permiso['user'] as Map<String, dynamic>?;
+          // Usar las fechas del permiso o la fecha de la actividad como fallback
+          final startDate = permiso['start_date'] as String? ?? actividadDate;
+          final endDate = permiso['end_date'] as String? ?? actividadDate;
+
+          if (status == 'rejected') {
+            await _supabase.client
+                .from('permissions')
+                .update({
+                  'actividad_id': null,
+                  'tipo_permiso': 'fecha',
+                  'start_date': startDate,
+                  'end_date': endDate,
+                })
+                .eq('id', permisoId);
+          } else {
+            // Pendiente o aprobado: rechazar + email
+            await _supabase.client
+                .from('permissions')
+                .update({
+                  'status': 'rejected',
+                  'rejection_reason': 'La actividad fue cancelada/eliminada.',
+                  'actividad_id': null,
+                  'tipo_permiso': 'fecha',
+                  'start_date': startDate,
+                  'end_date': endDate,
+                })
+                .eq('id', permisoId);
+
+            if (user != null) {
+              final email = user['email'] as String?;
+              final name = user['full_name'] as String? ?? '';
+              if (email != null && email.isNotEmpty) {
+                _emailService.sendPermissionDecisionNotification(
+                  firefighterEmail: email,
+                  firefighterName: name,
+                  approved: false,
+                  startDate: permiso['start_date'] as String? ?? '',
+                  endDate: permiso['end_date'] as String? ?? '',
+                  reason: permiso['reason'] as String? ?? '',
+                  rejectionReason: 'La actividad fue cancelada/eliminada.',
+                  activityName: activity['title'] as String?,
+                  aprobadorTipo: permiso['aprobador_tipo'] as String? ?? 'capitan',
+                );
+              }
+            }
+          }
+        }
+
+        await _supabase.deleteActivity(actividadId);
         _loadActivities();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -302,6 +364,7 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
   final _emailService = EmailService();
 
   ActivityType _selectedType = ActivityType.academiaCompania;
+  String _aprobadorOverride = 'capitan'; // 'capitan' o 'director'
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
@@ -322,6 +385,7 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
       _descriptionController.text = activity['description'] as String? ?? '';
       _locationController.text = activity['location'] as String? ?? '';
       _selectedType = activityTypeFromString(activity['activity_type'] as String);
+      _aprobadorOverride = activity['aprobador_override'] as String? ?? 'capitan';
       _selectedDate = DateTime.parse(activity['activity_date'] as String);
       
       // Parse times
@@ -364,10 +428,22 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
     setState(() => _isSaving = true);
 
     try {
+      final activityTypeStr = activityTypeToString(_selectedType);
+      
+      // Buscar el act_type_id en Supabase
+      final actTypeResult = await _supabase.client
+          .from('act_types')
+          .select('id')
+          .eq('activity_type_key', activityTypeStr)
+          .eq('is_active', true)
+          .single();
+
       final data = {
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
-        'activity_type': activityTypeToString(_selectedType),
+        'activity_type': activityTypeStr,
+        'act_type_id': actTypeResult['id'],
+        'aprobador_override': _selectedType == ActivityType.other ? _aprobadorOverride : null,
         'activity_date': _selectedDate!.toIso8601String().split('T')[0],
         'start_time': _startTime != null
             ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}:00'
@@ -398,32 +474,112 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
         final newDate = data['activity_date'] as String;
         
         if (oldDate != newDate) {
-          print('📅 Fecha cambiada: $oldDate -> $newDate');
-          print('🗑️  Limpiando recordatorios antiguos...');
-          
+          // Actualizar start_date/end_date de permisos tipo 'actividad' vinculados
+          try {
+            await _supabase.client
+                .from('permissions')
+                .update({
+                  'start_date': newDate,
+                  'end_date': newDate,
+                })
+                .eq('actividad_id', widget.activity!['id'])
+                .eq('tipo_permiso', 'actividad');
+          } catch (e) {
+            print('⚠️  Error actualizando fechas de permisos: $e');
+          }
+
           try {
             await _supabase.client
                 .from('sent_reminders')
                 .delete()
                 .eq('reference_id', widget.activity!['id']);
-            
-            print('✅ Recordatorios antiguos eliminados');
           } catch (e) {
             print('⚠️  Error limpiando recordatorios: $e');
-            // No fallar si hay error limpiando recordatorios
+          }
+
+          // Notificar a usuarios de permisos afectados
+          try {
+            final permisosAfectados = await _supabase.client
+                .from('permissions')
+                .select('user_id, users!user_id(email, full_name)')
+                .eq('actividad_id', widget.activity!['id'])
+                .eq('status', 'rejected')
+                .eq('tipo_permiso', 'actividad');
+
+            int correosEnviados = 0;
+            for (final p in permisosAfectados as List) {
+              final user = p['users'] as Map<String, dynamic>?;
+              if (user != null) {
+                final email = user['email'] as String?;
+                final name = user['full_name'] as String? ?? '';
+                if (email != null && email.isNotEmpty) {
+                  final emailSended = await EmailService().sendPermissionDecisionNotification(
+                    firefighterEmail: email,
+                    firefighterName: name,
+                    approved: false,
+                    startDate: newDate,
+                    endDate: newDate,
+                    reason: 'Solicitud para asistir a actividad',
+                    rejectionReason: 'La actividad cambió de fecha, por lo que su permiso ha sido anulado automáticamente.',
+                    activityName: data['title'] as String?,
+                    aprobadorTipo: p['aprobador_tipo'] as String? ?? 'capitan',
+                  );
+                  if (emailSended) correosEnviados++;
+                }
+              }
+            }
+            if (mounted && permisosAfectados.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Se rechazaron ${permisosAfectados.length} permiso(s) asociados a esta actividad por cambio de fecha.'),
+                  backgroundColor: AppTheme.criticalColor,
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          } catch (e) {
+            print('⚠️  Error notificando permisos rechazados por cambio de fecha: $e');
           }
         }
       }
 
-      // Enviar notificaciones por email a todos los usuarios
-      _sendEmailNotifications(isNewActivity, data);
+      // Enviar notificación via Edge Function (backend) ANTES de cerrar el dialog
+      // La Edge Function se encarga de buscar usuarios, filtrar y enviar todos los correos
+      if (_notifyNow) {
+        try {
+          Supabase.instance.client.functions.invoke(
+            'send-activity-notification',
+            body: {
+              'isNewActivity': isNewActivity,
+              'activityTitle': data['title'] as String,
+              'activityType': activityTypeFromString(data['activity_type'] as String).displayName,
+              'activityDate': DateFormat('dd/MM/yyyy').format(_selectedDate!),
+              'activityTime': _startTime != null
+                  ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
+                  : null,
+              'location': data['location'] as String?,
+              'description': data['description'] as String?,
+              'notifyGroups': _notifyGroups.toList(),
+            },
+          );
+        } catch (e) {
+          print('Error invocando send-activity-notification: $e');
+        }
+      }
 
       if (mounted) {
         widget.onSave();
+
+        final snackMessage = isNewActivity ? 'Actividad creada' : 'Actividad actualizada';
+        final emailMessage = _notifyNow
+            ? '$snackMessage. Enviando notificaciones...'
+            : snackMessage;
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isNewActivity ? 'Actividad creada' : 'Actividad actualizada'),
+            content: Text(emailMessage),
             backgroundColor: AppTheme.efectivaColor,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -440,91 +596,6 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
     }
   }
 
-  /// Envía notificaciones por email a los usuarios seleccionados
-  Future<void> _sendEmailNotifications(bool isNewActivity, Map<String, dynamic> data) async {
-    try {
-      // Solo enviar si "Enviar ahora" está marcado
-      if (!_notifyNow) return;
-      
-      // Obtener todos los usuarios
-      final response = await _supabase.client
-          .from('users')
-          .select()
-          .order('full_name');
-      
-      final allUsers = (response as List).map((json) => UserModel.fromJson(json)).toList();
-      
-      // Filtrar usuarios según grupos seleccionados
-      final filteredUsers = _filterUsersByGroups(allUsers, _notifyGroups);
-      
-      // Preparar datos para el email
-      final activityTitle = data['title'] as String;
-      final activityType = activityTypeFromString(data['activity_type'] as String).displayName;
-      final activityDate = DateFormat('dd/MM/yyyy').format(_selectedDate!);
-      final activityTime = _startTime != null
-          ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
-          : null;
-      final location = data['location'] as String?;
-      final description = data['description'] as String?;
-      
-      // Enviar emails
-      print('📧 Enviando emails a ${filteredUsers.length} usuarios...');
-      int emailsSent = 0;
-      int emailsFailed = 0;
-      
-      for (final user in filteredUsers) {
-        if (user.email == null || user.email!.isEmpty) continue;
-        
-        try {
-          if (isNewActivity) {
-            final success = await _emailService.sendActivityCreatedNotification(
-              userEmail: user.email!,
-              userName: user.fullName,
-              activityTitle: activityTitle,
-              activityType: activityType,
-              activityDate: activityDate,
-              activityTime: activityTime,
-              location: location,
-              description: description,
-            );
-            if (success) {
-              emailsSent++;
-              print('✅ Email enviado a: ${user.fullName} (${user.email})');
-            } else {
-              emailsFailed++;
-              print('❌ Error enviando email a: ${user.fullName} (${user.email})');
-            }
-          } else {
-            final success = await _emailService.sendActivityModifiedNotification(
-              userEmail: user.email!,
-              userName: user.fullName,
-              activityTitle: activityTitle,
-              activityDate: activityDate,
-              activityTime: activityTime,
-            );
-            if (success) {
-              emailsSent++;
-              print('✅ Email enviado a: ${user.fullName} (${user.email})');
-            } else {
-              emailsFailed++;
-              print('❌ Error enviando email a: ${user.fullName} (${user.email})');
-            }
-          }
-        } catch (e) {
-          emailsFailed++;
-          print('❌ Excepción enviando email a ${user.fullName}: $e');
-        }
-        
-        // Delay de 500ms para evitar sobrecarga (Brevo: 300 emails/día en plan gratuito)
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      
-      print('📊 Resumen: $emailsSent enviados, $emailsFailed fallidos');
-    } catch (e) {
-      // No fallar si hay error en emails, solo registrar
-      print('Error enviando notificaciones: $e');
-    }
-  }
   
   /// Filtra usuarios según los grupos seleccionados
   List<UserModel> _filterUsersByGroups(List<UserModel> users, Set<String> groups) {
@@ -659,6 +730,29 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
                   onChanged: (value) => setState(() => _selectedType = value!),
                 ),
                 const SizedBox(height: 16),
+
+                // Quién Aprueba (solo para Otra Actividad)
+                if (_selectedType == ActivityType.other) ...[
+                  DropdownButtonFormField<String>(
+                    value: _aprobadorOverride,
+                    decoration: const InputDecoration(
+                      labelText: 'Aprobador del Permiso *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'capitan',
+                        child: Text('Capitán'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'director',
+                        child: Text('Director'),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() => _aprobadorOverride = value!),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Fecha
                 InkWell(
@@ -835,6 +929,8 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
                   },
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
+                /*
+                // TODO: Habilitar cuando se configuren los correos de consejeros
                 CheckboxListTile(
                   dense: true,
                   title: const Text('Consejeros de Disciplina'),
@@ -851,6 +947,7 @@ class _ActivityFormDialogState extends State<_ActivityFormDialog> {
                   },
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
+                */
                 CheckboxListTile(
                   dense: true,
                   title: const Text('Postulantes/Aspirantes'),

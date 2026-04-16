@@ -5,6 +5,7 @@ import 'package:sexta_app/models/guard_attendance_model.dart';
 import 'package:sexta_app/models/user_model.dart';
 import 'package:sexta_app/services/guard_attendance_service.dart';
 import 'package:sexta_app/services/supabase_service.dart';
+import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/widgets/app_drawer.dart';
 import 'package:sexta_app/widgets/searchable_user_selector.dart';
 
@@ -36,6 +37,7 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
   bool _isLoadingUsers = true;
   List<UserModel> _allUsers = [];
   List<GuardAttendanceDiurna> _history = [];
+  String? _existingRecordId;
 
   @override
   void initState() {
@@ -65,9 +67,154 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
   Future<void> _loadHistory() async {
     try {
       final history = await _guardService.getDiurnaAttendanceHistory(limit: 10);
-      setState(() => _history = history);
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final yesterdayDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
+
+      final currentUser = AuthService().currentUser;
+      final userRole = currentUser?.role;
+      final isPrivileged = userRole == UserRole.admin || userRole == UserRole.oficial3;
+
+      final filteredHistory = history.where((h) {
+        final hDate = DateTime(h.guardDate.year, h.guardDate.month, h.guardDate.day);
+        final isRecent = !hDate.isBefore(yesterdayDate);
+        if (isPrivileged) {
+          return isRecent;
+        } else {
+          return isRecent && h.createdBy == currentUser?.id;
+        }
+      }).toList();
+
+      setState(() => _history = filteredHistory);
     } catch (e) {
       print('Error loading history: $e');
+    }
+  }
+
+  Future<void> _showAttendanceDetail(GuardAttendanceDiurna record) async {
+    final currentUser = AuthService().currentUser;
+    final userRole = currentUser?.role;
+    final bool isPrivileged = userRole == UserRole.admin || userRole == UserRole.oficial3;
+    final bool isCreator = record.createdBy == currentUser?.id;
+
+    final now = DateTime.now();
+    final hoursSinceCreation = now.difference(record.createdAt).inHours;
+    final isEditable = isPrivileged || (isCreator && hoursSinceCreation < 1);
+
+    final usersMap = {for (var u in _allUsers) u.id: u};
+
+    String nameFor(String? id) =>
+        id != null ? (usersMap[id]?.fullName ?? 'Desconocido') : '';
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Guardia Diurna ${DateFormat("dd/MM/yyyy").format(record.guardDate)} ${record.shiftPeriod}',
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+            if (isEditable)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('Editable', style: TextStyle(fontSize: 12, color: Colors.green)),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('Solo lectura', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (record.maquinista1Id != null)
+                  _buildDetailRow('Maquinista 1', nameFor(record.maquinista1Id)),
+                if (record.maquinista2Id != null)
+                  _buildDetailRow('Maquinista 2', nameFor(record.maquinista2Id)),
+                if (record.obacId != null)
+                  _buildDetailRow('OBAC', nameFor(record.obacId)),
+                for (final bId in record.bomberoIds.whereType<String>())
+                  _buildDetailRow('Bombero', nameFor(bId)),
+                if (record.observations != null && record.observations!.isNotEmpty) ...[
+                  const Divider(),
+                  Text('Observaciones: ${record.observations}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (isEditable)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _editAttendance(record);
+              },
+              child: const Text('Editar'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String position, String name) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(position, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ),
+          Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editAttendance(GuardAttendanceDiurna record) async {
+    setState(() {
+      _existingRecordId = record.id;
+      _selectedDate = record.guardDate;
+      _selectedPeriod = record.shiftPeriod;
+      _maquinista1Id = record.maquinista1Id;
+      _maquinista2Id = record.maquinista2Id;
+      _obacId = record.obacId;
+      for (int i = 0; i < record.bomberoIds.length && i < 10; i++) {
+        _bomberoIds[i] = record.bomberoIds[i];
+      }
+      _observationsController.text = record.observations ?? '';
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('📝 Registro cargado en el formulario. Modifique y presione Actualizar.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
     }
   }
 
@@ -77,7 +224,7 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
     if (!_formKey.currentState!.validate()) return;
 
     // Validate it's a weekday
-    if (!_guardService.isWeekday(_selectedDate)) {
+    if (!await _guardService.isWeekday(_selectedDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Las guardias Diurnas solo pueden registrarse en días de semana (Lun-Vie)'),
@@ -104,22 +251,35 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
     setState(() => _isLoading = true);
 
     try {
-      await _guardService.createDiurnaAttendance(
-        guardDate: _selectedDate,
-        shiftPeriod: _selectedPeriod,
-        maquinista1Id: _maquinista1Id,
-        maquinista2Id: _maquinista2Id,
-        obacId: _obacId,
-        bomberoIds: _bomberoIds,
-        observations: _observationsController.text.trim().isEmpty
-            ? null
-            : _observationsController.text.trim(),
-      );
+      if (_existingRecordId != null) {
+        await _guardService.updateDiurnaAttendance(_existingRecordId!, {
+          'maquinista_1_id': _maquinista1Id,
+          'maquinista_2_id': _maquinista2Id,
+          'obac_id': _obacId,
+          for (int i = 0; i < 10; i++) 'bombero_${i + 1}_id': _bomberoIds[i],
+          'observations': _observationsController.text.trim().isEmpty
+              ? null
+              : _observationsController.text.trim(),
+          'modified_by': AuthService().currentUser?.id,
+        });
+      } else {
+        await _guardService.createDiurnaAttendance(
+          guardDate: _selectedDate,
+          shiftPeriod: _selectedPeriod,
+          maquinista1Id: _maquinista1Id,
+          maquinista2Id: _maquinista2Id,
+          obacId: _obacId,
+          bomberoIds: _bomberoIds,
+          observations: _observationsController.text.trim().isEmpty
+              ? null
+              : _observationsController.text.trim(),
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Asistencia guardada exitosamente'),
+          SnackBar(
+            content: Text('✅ Asistencia ${_existingRecordId != null ? "actualizada" : "guardada"} exitosamente'),
             backgroundColor: Colors.green,
           ),
         );
@@ -130,9 +290,10 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
       }
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(msg),
             backgroundColor: Colors.red,
           ),
         );
@@ -153,6 +314,7 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
         _bomberoIds[i] = null;
       }
       _observationsController.clear();
+      _existingRecordId = null;
     });
   }
 
@@ -340,9 +502,9 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text(
-                                    'Guardar Asistencia',
-                                    style: TextStyle(fontSize: 16),
+                                : Text(
+                                    _existingRecordId != null ? 'Actualizar Asistencia' : 'Guardar Asistencia',
+                                    style: const TextStyle(fontSize: 16),
                                   ),
                           ),
                         ),
@@ -395,9 +557,7 @@ class _GuardDiurnaAttendanceScreenState extends State<GuardDiurnaAttendanceScree
                                   '${record.assignedCount} personas asignadas',
                                 ),
                                 trailing: const Icon(Icons.chevron_right),
-                                onTap: () {
-                                  // TODO: Navigate to detail/edit screen
-                                },
+                                onTap: () => _showAttendanceDetail(record),
                               ),
                             );
                           },

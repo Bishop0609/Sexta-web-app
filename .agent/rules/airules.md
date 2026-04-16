@@ -53,3 +53,34 @@ NO explorar schemas completos. Si necesitas estructura, pide al usuario la tabla
 Limitar queries a máximo 10 filas con LIMIT 10 siempre.
 NO hacer queries exploratorias múltiples. Preguntar primero qué tabla/dato se necesita.
 Preferir que el usuario pegue el SQL cuando sea código nuevo largo.
+
+Reglas SQL Supabase (críticas — bugs reales encontrados)
+Timezone:
+
+- Supabase corre en UTC. Chile es UTC-4 (sin DST) o UTC-3 (con DST).
+- Para filtros de fecha en lógica de negocio: usar (NOW() AT TIME ZONE 'America/Santiago')::date
+- NUNCA usar CURRENT_DATE solo. Devuelve UTC y causa bugs entre 20:00 y 23:59 hora Chile.
+- NOW() es seguro SOLO para columnas timestamptz de auditoría (created_at, updated_at).
+- Para comparar contra date o timestamp without time zone, convertir a Chile primero.
+
+Variables en plpgsql:
+
+- Variables locales con prefijo v_ (v_user_id, v_total_debt).
+- Parámetros con prefijo p_ (p_user_id, p_amount).
+- NUNCA usar el mismo nombre que una columna de tabla en variables locales.
+- Ejemplo de bug real: DECLARE standard_quota INTEGER + SELECT standard_quota INTO standard_quota → siempre NULL.
+
+Al generar funciones nuevas:
+
+- Si la función filtra por "hoy", "mes actual", "año actual": usar la conversión a Chile.
+- Si la función solo registra timestamps de cuándo pasó algo: NOW() está OK.
+- En caso de duda, preguntar al usuario antes de elegir.
+
+Patrones críticos del proyecto Sexta App:
+
+- Tabla de usuarios se llama "users" (NO "usuarios"). Campos: full_name, rank (NO nombre/apellido/rango).
+- Auth: usar AuthService().currentUser, NUNCA _supabase.auth.currentUser directamente.
+- registro_compania puede ser "s/r" (no numérico) → usar int.tryParse() con default 9999.
+- Edge Functions: deployar siempre con --no-verify-jwt. El toggle "Verify JWT" se resetea a ON tras cada deploy CLI.
+- Emails @noemail.cl deben excluirse de envíos masivos.
+- En queries Supabase: .eq() siempre antes de .order() (.order devuelve PostgrestTransformBuilder sin filtros).

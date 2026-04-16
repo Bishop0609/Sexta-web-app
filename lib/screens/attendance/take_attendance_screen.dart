@@ -35,12 +35,19 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
   bool _isLoading = false;
   bool _isSaving = false;
 
+  // Modo de asistencia
+  String _modoAsistencia = 'manual'; // 'programada' o 'manual'
+  List<Map<String, dynamic>> _actividadesProgramadas = [];
+  Map<String, dynamic>? _selectedActividadProgramada;
+  bool _isLoadingActividades = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentUser();
     _loadActTypes();
+    _loadActividadesProgramadas();
   }
 
   @override
@@ -66,10 +73,14 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
       '10-10',
       '10-11',
       '10-12',
+      'INCENDIO',
+      '6-16',
+      '0-11',
     ],
-    'Reunión de Compañía': [
-      'Ordinaria',
-      'Extraordinaria',
+    'Otra Actividad': [
+      'Otra Citación',
+      'Trabajo de Comandancia',
+      'Trabajo de Compañía',
     ],
   };
   
@@ -88,12 +99,74 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
   Future<void> _loadActTypes() async {
     try {
       final actTypes = await _supabase.getAllActTypes();
-      print('✅ Act types loaded: ${actTypes.length} tipos'); // DEBUG
-      print('Act types: $actTypes'); // DEBUG
       setState(() => _actTypes = actTypes);
+
+      if (_modoAsistencia == 'manual' && _selectedActTypeId == null) {
+        final emergencia = _actTypes.firstWhere(
+          (t) => t['name'] == 'Emergencia' || t['activity_type_key'] == 'emergencia',
+          orElse: () => <String, dynamic>{},
+        );
+        if (emergencia.isNotEmpty) {
+          setState(() => _selectedActTypeId = emergencia['id'] as String);
+        }
+      }
     } catch (e) {
-      print('❌ Error loading act types: $e'); // DEBUG
       _showError('Error cargando tipos de acto: $e');
+    }
+  }
+
+  Future<void> _loadActividadesProgramadas() async {
+    setState(() => _isLoadingActividades = true);
+    try {
+      final result = await _supabase.client.rpc('get_actividades_futuras_con_permisos');
+      final allActividades = List<Map<String, dynamic>>.from(result as List);
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final disponibles = allActividades.where((act) {
+        final actDateStr = act['activity_date'] as String?;
+        if (actDateStr == null) return false;
+        final actDate = DateTime.parse(actDateStr);
+        final actDay = DateTime(actDate.year, actDate.month, actDate.day);
+
+        if (actDay != today) return false;
+
+        final startTimeStr = act['start_time'] as String?;
+        if (startTimeStr != null && startTimeStr.isNotEmpty) {
+          final parts = startTimeStr.split(':');
+          if (parts.length >= 2) {
+            final actDateTime = DateTime(
+              actDate.year, actDate.month, actDate.day,
+              int.parse(parts[0]), int.parse(parts[1]),
+            );
+            final disponibleDesde = actDateTime.subtract(const Duration(minutes: 30));
+            return now.isAfter(disponibleDesde);
+          }
+        }
+        return true; // Sin hora, disponible todo el día
+      }).toList();
+
+      // Verificar cuáles de las actividades disponibles ya tienen asistencia tomada
+      final existentes = await _supabase.client
+          .from('attendance_events')
+          .select('actividad_id')
+          .not('actividad_id', 'is', null)
+          .inFilter('actividad_id', disponibles.map((a) => a['id']).toList());
+
+      final existentesSet = (existentes as List).map((e) => e['actividad_id'] as String).toSet();
+
+      // Agregar campo 'ya_tomada'
+      for (var act in disponibles) {
+        act['ya_tomada'] = existentesSet.contains(act['id']);
+      }
+
+      setState(() {
+        _actividadesProgramadas = disponibles;
+        _isLoadingActividades = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingActividades = false);
     }
   }
 
@@ -104,22 +177,86 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
     return name != null ? _actSubtypes[name] : null;
   }
 
-  Future<void> _loadAttendanceList() async {
+  Future<void> _loadAttendanceList({String? actividadId}) async {
     if (_selectedActTypeId == null) {
       _showError('Por favor seleccione un tipo de acto');
       return;
     }
 
+    // Validar subtipo obligatorio para Emergencia
+    final actType = _actTypes.firstWhere((t) => t['id'] == _selectedActTypeId, orElse: () => {});
+    final subtypes = _actSubtypes[actType['name']];
+    if (subtypes != null && _selectedSubtype == null) {
+      _showError('Debe seleccionar un subtipo para ${actType['name']}');
+      return;
+    }
+
+    if (_modoAsistencia == 'manual') {
+      try {
+        final dateStr = _selectedDate.toIso8601String().split('T')[0];
+        final actividades = await _supabase.client
+            .from('activities')
+            .select('id, title')
+            .eq('activity_date', dateStr)
+            .limit(1);
+
+        if (actividades.isNotEmpty) {
+          final nombreActividad = actividades.first['title'] as String;
+          final bool? continuar = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Actividad Programada Existente')),
+                  ],
+                ),
+                content: Text(
+                  '⚠️ Existe una actividad programada para esta fecha:\n\n'
+                  '🔹 "$nombreActividad"\n\n'
+                  'Se recomienda usar el modo "Actividad Programada" para vincular los permisos de manera automática.\n\n'
+                  '¿Desea continuar con asistencia manual de todas formas?'
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false), // Ir a Programada
+                    child: const Text('Ir a Programada', style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.bold)),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true), // Continuar Manual
+                    style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                    child: const Text('Continuar Manual'),
+                  ),
+                ],
+              );
+            },
+          );
+
+          if (continuar == false) {
+            // Cambiar a modo programada y cancelar la carga actual
+            setState(() {
+              _modoAsistencia = 'programada';
+            });
+            return;
+          }
+          // Si continuar == true (o null), sigue el flujo normal
+        }
+      } catch (e) {
+        print('Error verificando actividades en asistencia manual: $e');
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      // 1. Cargar todos los usuarios
       final users = await _supabase.getAllUsers();
-      
-      // 2. LÓGICA CRÍTICA: Preparar lista con auto-check de licencias
       final attendanceList = await _attendanceService.prepareAttendanceList(
         users,
         _selectedDate,
+        actividadId: actividadId ?? (_modoAsistencia == 'programada' && _selectedActividadProgramada != null ? _selectedActividadProgramada!['id'] as String? : null),
       );
 
       setState(() {
@@ -127,7 +264,6 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
         _isLoading = false;
       });
 
-      // Mostrar info de usuarios con Permiso
       final licensedCount = attendanceList.where((u) => u['hasLicense'] == true).length;
       if (licensedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,13 +286,19 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
       return;
     }
 
+    // Validar que al menos 1 asistente esté marcado como presente
+    final presentCount = _attendanceList.where((u) => u['status'] == AttendanceStatus.present).length;
+    if (presentCount == 0) {
+      _showError('Debe marcar al menos un asistente como presente');
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
       final userId = _authService.currentUserId;
       if (userId == null) throw Exception('Usuario no autenticado');
 
-      // Preparar registros de asistencia
       final records = _attendanceList.map((item) {
         final user = item['user'] as UserModel;
         return {
@@ -166,21 +308,22 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
         };
       }).toList();
 
-      // Crear evento y registros
       await _attendanceService.createAttendanceEvent(
         actTypeId: _selectedActTypeId!,
         eventDate: _selectedDate,
         createdBy: userId,
         attendanceRecords: records,
-        subtype: _selectedSubtype,
-        location: _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
+        subtype: _modoAsistencia == 'manual' ? _selectedSubtype : null,
+        location: _modoAsistencia == 'manual' && _locationController.text.trim().isNotEmpty
+            ? _locationController.text.trim()
+            : null,
+        actividadId: _modoAsistencia == 'programada' ? _selectedActividadProgramada!['id'] as String : null,
+        modoAsistencia: _modoAsistencia,
       );
 
-      // Enviar notificación a ayudantía
       try {
         final actTypeName = _actTypes.firstWhere((t) => t['id'] == _selectedActTypeId)['name'] as String;
         final totals = _calculateTotals();
-        
         await EmailService().sendAttendanceCreatedNotification(
           eventDate: DateFormat('dd/MM/yyyy').format(_selectedDate),
           actType: actTypeName,
@@ -189,10 +332,9 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
           createdBy: _currentUser!.fullName,
           totalPresent: totals['present']!,
           totalAbsent: totals['absent']!,
-          totalLicencia: totals['licencia']!,
+          totalLicencia: totals['permiso']!,
         );
       } catch (emailError) {
-        // No bloquear el flujo si falla el email
         print('Error enviando notificación: $emailError');
       }
 
@@ -203,24 +345,22 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
             backgroundColor: AppTheme.efectivaColor,
           ),
         );
-
-        // Limpiar formulario
         setState(() {
           _attendanceList = [];
           _selectedActTypeId = null;
+          _selectedActividadProgramada = null;
         });
+        await _loadActividadesProgramadas(); // Recargar lista para actualizar el marcador
       }
     } catch (e) {
       _showError('Error guardando asistencia: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Map<String, int> _calculateTotals() {
-    int present = 0, absent = 0, licencia = 0;
+    int present = 0, absent = 0, permiso = 0;
     for (final item in _attendanceList) {
       final status = item['status'] as AttendanceStatus;
       switch (status) {
@@ -230,12 +370,12 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
         case AttendanceStatus.absent:
           absent++;
           break;
-        case AttendanceStatus.licencia:
-          licencia++;
+        case AttendanceStatus.permiso:
+          permiso++;
           break;
       }
     }
-    return {'present': present, 'absent': absent, 'licencia': licencia};
+    return {'present': present, 'absent': absent, 'permiso': permiso};
   }
 
   void _toggleAttendance(int index) {
@@ -372,11 +512,190 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
 
   Widget _buildTakeAttendanceTab() {
     return SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Configuración del evento
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // SegmentedButton modo de asistencia
+          SegmentedButton<String>(
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: AppTheme.institutionalRed,
+              selectedForegroundColor: Colors.white,
+            ),
+            segments: const [
+              ButtonSegment(
+                value: 'programada',
+                label: Text('Actividad Programada'),
+                icon: Icon(Icons.event),
+              ),
+              ButtonSegment(
+                value: 'manual',
+                label: Text('Asistencia Emergencias'),
+                icon: Icon(Icons.edit_note),
+              ),
+            ],
+            selected: {_modoAsistencia},
+            onSelectionChanged: (val) {
+              setState(() {
+                _modoAsistencia = val.first;
+                _attendanceList = [];
+                _selectedActividadProgramada = null;
+                if (_modoAsistencia == 'programada' && _actividadesProgramadas.isEmpty) {
+                  _loadActividadesProgramadas();
+                }
+                // Preseleccionar Emergencia en modo manual
+                if (_modoAsistencia == 'manual') {
+                  final emergenciaType = _actTypes.firstWhere(
+                    (t) => t['name'] == 'Emergencia' || t['activity_type_key'] == 'emergencia',
+                    orElse: () => {},
+                  );
+                  if (emergenciaType.isNotEmpty) {
+                    _selectedActTypeId = emergenciaType['id'] as String;
+                  }
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // === MODO PROGRAMADA ===
+          if (_modoAsistencia == 'programada') ...[
+            if (_isLoadingActividades)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(),
+              ))
+            else if (_actividadesProgramadas.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      'No hay actividades disponibles en este momento.\nLas actividades aparecen 30 minutos antes de su hora de inicio.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              )
+            else
+              ...(_actividadesProgramadas.map((act) {
+                final title = act['title'] as String? ?? 'Sin título';
+                final actTypeName = act['act_type_name'] as String? ?? '';
+                final dateStr = act['activity_date'] as String? ?? '';
+                final timeStr = act['start_time'] as String? ?? '';
+                final permisosCount = act['permisos_aprobados'] as int? ?? 0;
+
+                String emoji = '📅';
+                if (actTypeName.contains('Academia')) emoji = '📚';
+                else if (actTypeName.contains('Reunión')) emoji = '🤝';
+                else if (actTypeName.contains('Citación')) emoji = '📢';
+
+                String fechaDisplay = '';
+                if (dateStr.isNotEmpty) {
+                  try {
+                    fechaDisplay = DateFormat('dd/MM/yyyy').format(DateTime.parse(dateStr));
+                  } catch (_) {}
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(emoji, style: const TextStyle(fontSize: 24)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  Text(
+                                    '$fechaDisplay${timeStr.isNotEmpty ? '  ${timeStr.substring(0, 5)}' : ''}',
+                                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (permisosCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warningColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.warningColor.withOpacity(0.4)),
+                                ),
+                                child: Text(
+                                  '🟡 $permisosCount con permiso',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.warningColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: act['ya_tomada'] == true
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.abonoColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppTheme.abonoColor.withOpacity(0.3)),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  '✅ Asistencia Tomada',
+                                  style: TextStyle(
+                                    color: AppTheme.abonoColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            : ElevatedButton.icon(
+                                onPressed: _isLoading ? null : () {
+                                  // Resolver act_type_id desde act_type_name
+                                  final actTypeMap = _actTypes.where(
+                                    (t) => (t['name'] as String).toLowerCase() == actTypeName.toLowerCase()
+                                  ).firstOrNull;
+
+                                  setState(() {
+                                    _selectedActividadProgramada = act;
+                                    _selectedActTypeId = actTypeMap?['id'] as String? ?? _selectedActTypeId;
+                                    // Usar la fecha de la actividad
+                                    if (dateStr.isNotEmpty) {
+                                      try {
+                                        _selectedDate = DateTime.parse(dateStr);
+                                      } catch (_) {}
+                                    }
+                                  });
+                                  _loadAttendanceList();
+                                },
+                                icon: _isLoading && _selectedActividadProgramada?['id'] == act['id']
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.people),
+                                label: const Text('Tomar Asistencia'),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              })).toList(),
+          ],
+
+          // === MODO MANUAL ===
+          if (_modoAsistencia == 'manual')
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -421,35 +740,51 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
                         border: OutlineInputBorder(),
                         hintText: 'Seleccione tipo de acto',
                       ),
-                      items: _actTypes.map((actType) {
-                        final category = actType['category'] as String;
-                        final color = category == 'efectiva' 
-                            ? AppTheme.efectivaColor 
-                            : AppTheme.abonoColor;
-                        
-                        return DropdownMenuItem(
-                          value: actType['id'] as String,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(actType['name'] as String),
-                            ],
-                          ),
-                        );
-                      }).toList(),
+                      items: [
+                        DropdownMenuItem<String>(
+                          value: 'header_emergencia',
+                          enabled: false,
+                          child: Text('── EMERGENCIA ──', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 12)),
+                        ),
+                        ..._actTypes.where((t) => t['name'] == 'Emergencia' || t['activity_type_key'] == 'emergencia').map((actType) {
+                          final category = actType['category'] as String;
+                          final color = category == 'efectiva' ? AppTheme.efectivaColor : AppTheme.abonoColor;
+                          return DropdownMenuItem<String>(
+                            value: actType['id'] as String,
+                            child: Row(
+                              children: [
+                                Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                const SizedBox(width: 12),
+                                Text(actType['name'] as String),
+                              ],
+                            ),
+                          );
+                        }),
+                        DropdownMenuItem<String>(
+                          value: 'header_actividades',
+                          enabled: false,
+                          child: Text('── ACTIVIDADES ──', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 12)),
+                        ),
+                        ..._actTypes.where((t) => t['name'] != 'Emergencia' && t['activity_type_key'] != 'emergencia').map((actType) {
+                          final category = actType['category'] as String;
+                          final color = category == 'efectiva' ? AppTheme.efectivaColor : AppTheme.abonoColor;
+                          return DropdownMenuItem<String>(
+                            value: actType['id'] as String,
+                            child: Row(
+                              children: [
+                                Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                const SizedBox(width: 12),
+                                Text(actType['name'] as String),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
                       onChanged: (value) {
                         setState(() {
                           _selectedActTypeId = value;
-                          _selectedSubtype = null; // Reset subtipo al cambiar tipo
-                          _attendanceList = []; // Reset lista si cambia tipo
+                          _selectedSubtype = null;
+                          _attendanceList = [];
                         });
                       },
                     ),
@@ -466,7 +801,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
                         value: _selectedSubtype,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
-                          hintText: 'Seleccione  subtipo',
+                          hintText: 'Seleccione subtipo',
                         ),
                         items: _getSubtypesForActType()!.map((subtype) {
                           return DropdownMenuItem<String>(
@@ -497,7 +832,6 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
                     ),
                     const SizedBox(height: 20),
                     
-                    // Botón cargar lista
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -519,78 +853,122 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
                 ),
               ),
             ),
-            
-            // Lista de asistencia AGRUPADA POR CATEGORÍA
-            if (_attendanceList.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Lista de Asistencia',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${_attendanceList.where((u) => u['status'] == AttendanceStatus.present).length}/${_attendanceList.length} presentes',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: AppTheme.efectivaColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Leyenda
-                      Wrap(
-                        spacing: 16,
-                        children: [
-                          _buildLegend(Icons.check_circle, 'Presente', AppTheme.efectivaColor),
-                          _buildLegend(Icons.cancel, 'Ausente', Colors.grey),
-                          _buildLegend(Icons.lock, 'Licencia (Bloqueado)', AppTheme.warningColor),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // GRUPOS POR CATEGORÍA
-                      ..._buildGroupedAttendanceList(),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Botón guardar
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _saveAttendance,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving ? 'Guardando...' : 'Guardar Asistencia'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.all(16),
+          
+          // Lista de asistencia AGRUPADA POR CATEGORÍA
+          if (_attendanceList.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Lista de Asistencia',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${_attendanceList.where((u) => u['status'] == AttendanceStatus.present).length}/${_attendanceList.length} presentes',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.efectivaColor,
                           ),
                         ),
-                      ),
+                      ],
+                    ),
+                    if (_selectedActividadProgramada != null) ...[
+                      const SizedBox(height: 12),
+                      Builder(builder: (context) {
+                        final act = _selectedActividadProgramada!;
+                        final actTypeName = act['act_type_name'] as String? ?? act['activity_type'] as String? ?? '';
+                        final title = act['title'] as String? ?? '';
+                        final dateRaw = act['activity_date'] as String? ?? '';
+                        final timeRaw = act['start_time'] as String?;
+                        String fechaDisplay = '';
+                        try { fechaDisplay = DateFormat('dd/MM/yyyy').format(DateTime.parse(dateRaw)); } catch (_) {}
+                        final timeDisplay = (timeRaw != null && timeRaw.length >= 5) ? ' ${timeRaw.substring(0, 5)}' : '';
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.navyBlue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.navyBlue.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            '$actTypeName: $title — $fechaDisplay$timeDisplay',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.navyBlue),
+                          ),
+                        );
+                      }),
                     ],
-                  ),
+                    const SizedBox(height: 16),
+                    
+                    // Leyenda
+                    Wrap(
+                      spacing: 16,
+                      children: [
+                        _buildLegend(Icons.check_circle, 'Presente', AppTheme.efectivaColor),
+                        _buildLegend(Icons.cancel, 'Ausente', Colors.grey),
+                        _buildLegend(Icons.event_available, 'Permiso (Bloqueado)', AppTheme.warningColor),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // GRUPOS POR CATEGORÍA
+                    ..._buildGroupedAttendanceList(),
+                    
+                    const SizedBox(height: 20),
+                    
+                    // Botones cancelar y guardar
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _attendanceList = [];
+                              });
+                            },
+                            icon: const Icon(Icons.cancel_outlined),
+                            label: const Text('Cancelar'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _saveAttendance,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(_isSaving ? 'Guardando...' : 'Guardar Asistencia'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ],
-        ),
-      );
+        ],
+      ),
+    );
   }
 
   /// Groups attendance by rank category with proper ordering
@@ -797,7 +1175,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> with Single
     Color statusColor;
     IconData statusIcon;
     
-    if (status == AttendanceStatus.licencia) {
+    if (status == AttendanceStatus.permiso) {
       statusColor = AppTheme.warningColor;
       statusIcon = Icons.lock;
     } else if (status == AttendanceStatus.present) {

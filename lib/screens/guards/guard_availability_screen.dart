@@ -59,6 +59,9 @@ class _GuardAvailabilityScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadData();
   }
 
@@ -77,7 +80,7 @@ class _GuardAvailabilityScreenState
       final activePeriod = await _periodService.getActivePeriod();
 
       if (_currentUser != null) {
-        final startDate = DateTime.now();
+        final startDate = activePeriod?.periodStart ?? DateTime.now();
         final availability = await _guardRosterService.getUserAvailability(
           _currentUser!.id,
           startDate: startDate,
@@ -105,12 +108,14 @@ class _GuardAvailabilityScreenState
             guardType: 'fds',
             shiftPeriod: 'AM',
           );
+
           final fdsCapPm = await _guardRosterService.getRangeCapacity(
             activePeriod.periodStart,
             activePeriod.periodEnd,
             guardType: 'fds',
             shiftPeriod: 'PM',
           );
+
           final fdsCapMap = <String, Map<String, Map<String, dynamic>>>{
             'AM': {for (var i in fdsCapAm) if (i['date'] != null) i['date'] as String: i},
             'PM': {for (var i in fdsCapPm) if (i['date'] != null) i['date'] as String: i},
@@ -435,27 +440,32 @@ class _GuardAvailabilityScreenState
       appBar: AppBar(
         title: const Text('Inscribir Disponibilidad'),
         backgroundColor: AppTheme.institutionalRed,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.nightlight_round), text: 'Nocturna'),
-            Tab(icon: Icon(Icons.wb_sunny), text: 'Diurna FDS'),
-          ],
-        ),
       ),
       drawer: const AppDrawer(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _activePeriod == null
               ? _buildNoPeriodState()
-              : TabBarView(
-                  controller: _tabController,
+              : Column(
                   children: [
-                    _buildNocturnaTab(),
-                    _buildFdsTab(),
+                    Material(
+                      color: AppTheme.institutionalRed,
+                      child: TabBar(
+                        controller: _tabController,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.white70,
+                        indicatorColor: Colors.white,
+                        tabs: const [
+                          Tab(icon: Icon(Icons.nightlight_round), text: 'Nocturna'),
+                          Tab(icon: Icon(Icons.wb_sunny), text: 'Diurna FDS'),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _tabController.index == 0
+                          ? _buildNocturnaTab()
+                          : _buildFdsTab(),
+                    ),
                   ],
                 ),
     );
@@ -592,18 +602,16 @@ class _GuardAvailabilityScreenState
     final start = _activePeriod!.periodStart;
     final end = _activePeriod!.periodEnd;
 
-    // Generar todos los días del período
+    // Generar días con patrón seguro (sin Duration)
     final allDays = <DateTime>[];
-    DateTime cur = start;
-    while (!cur.isAfter(end)) {
-      allDays.add(cur);
-      cur = cur.add(const Duration(days: 1));
+    int totalDays = end.difference(start).inDays + 1;
+    for (int i = 0; i < totalDays; i++) {
+      allDays.add(DateTime(start.year, start.month, start.day + i));
     }
 
     // Organizar en semanas
     final weeks = <List<DateTime?>>[];
-    // offsetear el primer día de la semana (lunes=0)
-    final firstWeekday = start.weekday; // 1=Mon, 7=Sun
+    final firstWeekday = start.weekday;
     List<DateTime?> currentWeek = List<DateTime?>.generate(firstWeekday - 1, (_) => null);
     for (final d in allDays) {
       currentWeek.add(d);
@@ -621,7 +629,6 @@ class _GuardAvailabilityScreenState
 
     return Column(
       children: [
-        // Cabecera días
         Row(
           children: dayLabels.map((l) {
             return Expanded(
@@ -649,11 +656,8 @@ class _GuardAvailabilityScreenState
                 final isSelected = _fdsSelectedDates.any((d) =>
                     d.year == day.year && d.month == day.month && d.day == day.day);
 
-                // Capacidad
-                final capAm = _fdsCapacity['AM']?[key];
-                final capPm = _fdsCapacity['PM']?[key];
-                final totalAm = capAm?['total'] as int? ?? 0;
-                final totalPm = capPm?['total'] as int? ?? 0;
+                final totalAm = int.tryParse(_fdsCapacity['AM']?[key]?['total']?.toString() ?? '0') ?? 0;
+                final totalPm = int.tryParse(_fdsCapacity['PM']?[key]?['total']?.toString() ?? '0') ?? 0;
 
                 Color bg;
                 if (!selectable) {

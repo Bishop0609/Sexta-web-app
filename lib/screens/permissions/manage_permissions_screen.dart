@@ -8,6 +8,7 @@ import 'package:sexta_app/services/pdf_service.dart';
 import 'package:intl/intl.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/storage_service.dart';
+import 'package:sexta_app/models/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ManagePermissionsScreen extends StatefulWidget {
@@ -35,12 +36,31 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
   final TextEditingController _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, approved, rejected
   DateTimeRange? _dateRange;
+  String _filtroAprobador = 'todos'; // 'todos', 'capitan', 'director'
+  String _filtroAprobadorHistorial = 'todos'; // filtro separado para historial
+
+  // Estado tab Reportes
+  String _reportMode = 'fechas'; // 'fechas' o 'actividad'
+  String _reportStatusFilter = 'all'; // all, approved, rejected
+  String _reportAprobador = 'todos'; // todos, capitan, director
+  DateTimeRange? _reportDateRange;
+  String? _reportSelectedUserId;
+  String? _reportSelectedUserName;
+  List<UserModel> _reportUsers = [];
+  List<Map<String, dynamic>> _reportActividades = [];
+  String? _reportSelectedActividadId;
+  String? _reportSelectedActividadName;
+  bool _isGeneratingReport = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) setState(() {});
+    });
     _loadPermissions();
+    _loadUsersForReport();
   }
 
   @override
@@ -48,6 +68,25 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUsersForReport() async {
+    try {
+      final users = await _supabase.getAllUsers();
+      setState(() => _reportUsers = users);
+    } catch (e) {
+      // silently ignore
+    }
+    try {
+      final actividades = await _supabase.client
+          .from('activities')
+          .select('id, title, activity_date, activity_type')
+          .order('activity_date', ascending: false)
+          .limit(10);
+      setState(() => _reportActividades = List<Map<String, dynamic>>.from(actividades as List));
+    } catch (e) {
+      // silently ignore
+    }
   }
 
   Future<void> _loadPermissions() async {
@@ -96,33 +135,35 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
     // Filtrar por rango de fechas (busca en start_date, end_date y reviewed_at)
     if (_dateRange != null) {
       filtered = filtered.where((p) {
-        final startDate = DateTime.parse(p['start_date']);
-        final endDate = DateTime.parse(p['end_date']);
-        
-        // También considerar la fecha de revisión si existe
+        final startDateStr = p['start_date'] as String?;
+        final endDateStr = p['end_date'] as String?;
+
         DateTime? reviewedDate;
         if (p['reviewed_at'] != null) {
-          try {
-            reviewedDate = DateTime.parse(p['reviewed_at']);
-          } catch (e) {
-            // Ignorar si no se puede parsear
-          }
+          try { reviewedDate = DateTime.parse(p['reviewed_at']); } catch (e) {}
         }
-        
+
         final rangeStart = _dateRange!.start;
-        final rangeEnd = _dateRange!.end.add(const Duration(days: 1)); // Incluir todo el último día
-        
-        // El permiso coincide si cualquiera de sus fechas está en el rango
-        final startInRange = startDate.isAfter(rangeStart.subtract(const Duration(days: 1))) && startDate.isBefore(rangeEnd);
-        final endInRange = endDate.isAfter(rangeStart.subtract(const Duration(days: 1))) && endDate.isBefore(rangeEnd);
-        final reviewedInRange = reviewedDate != null && 
-                                reviewedDate.isAfter(rangeStart.subtract(const Duration(days: 1))) && 
+        final rangeEnd = _dateRange!.end.add(const Duration(days: 1));
+
+        bool startInRange = false;
+        bool endInRange = false;
+        if (startDateStr != null) {
+          final startDate = DateTime.parse(startDateStr);
+          startInRange = startDate.isAfter(rangeStart.subtract(const Duration(days: 1))) && startDate.isBefore(rangeEnd);
+        }
+        if (endDateStr != null) {
+          final endDate = DateTime.parse(endDateStr);
+          endInRange = endDate.isAfter(rangeStart.subtract(const Duration(days: 1))) && endDate.isBefore(rangeEnd);
+        }
+        final reviewedInRange = reviewedDate != null &&
+                                reviewedDate.isAfter(rangeStart.subtract(const Duration(days: 1))) &&
                                 reviewedDate.isBefore(rangeEnd);
-        
+
         return startInRange || endInRange || reviewedInRange;
       }).toList();
     }
-    
+
     _filteredHistoricalPermissions = filtered;
   }
 
@@ -181,9 +222,15 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
           permissions.addAll(rejected);
         }
 
-        // Ordenar por fecha de inicio
-        permissions.sort((a, b) =>
-            (a['start_date'] as String).compareTo(b['start_date'] as String));
+        // Ordenar por fecha de inicio (null-safe: actividad va al final)
+        permissions.sort((a, b) {
+          final sa = a['start_date'] as String?;
+          final sb = b['start_date'] as String?;
+          if (sa == null && sb == null) return 0;
+          if (sa == null) return 1;
+          if (sb == null) return -1;
+          return sa.compareTo(sb);
+        });
 
         if (mounted) Navigator.of(context).pop();
 
@@ -227,8 +274,32 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
           .firstWhere((p) => p['id'] == permissionId);
       final userEmail = permission['user']['email'] as String?;
       final userName = permission['user']['full_name'] as String;
-      final startDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(permission['start_date']));
-      final endDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(permission['end_date']));
+      final tipoPermiso = permission['tipo_permiso'] as String? ?? 'fecha';
+      
+      String startDate = '';
+      String endDate = '';
+      String? activityName;
+      String? activityDate;
+      
+      if (tipoPermiso == 'actividad') {
+        final activity = permission['activity'] as Map<String, dynamic>?;
+        if (activity != null) {
+          activityName = activity['title'] as String?;
+          if (activity['activity_date'] != null) {
+            activityDate = DateFormat('dd/MM/yyyy').format(DateTime.parse(activity['activity_date']));
+          }
+        }
+      } else {
+        final startRaw = permission['start_date'] as String?;
+        final endRaw = permission['end_date'] as String?;
+        startDate = startRaw != null
+            ? DateFormat('dd/MM/yyyy').format(DateTime.parse(startRaw))
+            : '';
+        endDate = endRaw != null
+            ? DateFormat('dd/MM/yyyy').format(DateTime.parse(endRaw))
+            : '';
+      }
+      
       final reason = permission['reason'] as String;
 
       if (userEmail != null) {
@@ -240,6 +311,9 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
           endDate: endDate,
           reason: reason,
           rejectionReason: rejectionReason,
+          activityName: activityName,
+          activityDate: activityDate,
+          aprobadorTipo: permission['aprobador_tipo'] as String? ?? 'capitan',
         );
       }
 
@@ -280,19 +354,17 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
               icon: const Icon(Icons.pending_actions),
               text: 'Pendientes (${_pendingPermissions.length})',
             ),
-            Tab(
-              icon: const Icon(Icons.history),
+            const Tab(
+              icon: Icon(Icons.history),
               text: 'Historial',
+            ),
+            const Tab(
+              icon: Icon(Icons.picture_as_pdf),
+              text: 'Reportes',
             ),
           ],
         ),
         actions: [
-          if (_tabController.index == 1)
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-              tooltip: 'Generar Reporte PDF',
-              onPressed: _showReportDialog,
-            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadPermissions,
@@ -307,35 +379,90 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
               children: [
                 _buildPendingTab(),
                 _buildHistoryTab(),
+                _buildReportTab(),
               ],
             ),
     );
   }
 
   Widget _buildPendingTab() {
-    if (_pendingPermissions.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, size: 80, color: AppTheme.efectivaColor),
-            SizedBox(height: 16),
-            Text(
-              'No hay permisos pendientes',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-          ],
+    final displayPermissions = _filtroAprobador == 'todos'
+        ? _pendingPermissions
+        : _pendingPermissions.where((p) {
+            final aprobador = p['aprobador_tipo'] as String?;
+            return aprobador == _filtroAprobador;
+          }).toList();
+          
+    final countCapitan = _pendingPermissions.where((p) => p['aprobador_tipo'] == 'capitan').length;
+    final countDirector = _pendingPermissions.where((p) => p['aprobador_tipo'] == 'director').length;
+    
+    return Column(
+      children: [
+        // Filtros por aprobador + leyenda
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(
+                child: Text('🔵 Capitán  🟡 Director',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Todos'),
+                    selected: _filtroAprobador == 'todos',
+                    onSelected: (_) => setState(() => _filtroAprobador = 'todos'),
+                  ),
+                  FilterChip(
+                    label: Text('Capitán ($countCapitan)'),
+                    avatar: CircleAvatar(
+                        backgroundColor: Colors.blue[700], radius: 6),
+                    selected: _filtroAprobador == 'capitan',
+                    onSelected: (_) => setState(() => _filtroAprobador = 'capitan'),
+                  ),
+                  FilterChip(
+                    label: Text('Director ($countDirector)'),
+                    avatar: CircleAvatar(
+                        backgroundColor: Colors.amber[700], radius: 6),
+                    selected: _filtroAprobador == 'director',
+                    onSelected: (_) => setState(() => _filtroAprobador = 'director'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _pendingPermissions.length,
-      itemBuilder: (context, index) {
-        final permission = _pendingPermissions[index];
-        return _buildPermissionCard(permission, isPending: true);
-      },
+        // Lista
+        Expanded(
+          child: displayPermissions.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, size: 80, color: AppTheme.efectivaColor),
+                      SizedBox(height: 16),
+                      Text(
+                        'No hay permisos pendientes',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: displayPermissions.length,
+                  itemBuilder: (context, index) {
+                    final permission = displayPermissions[index];
+                    return _buildPermissionCard(permission, isPending: true);
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -349,12 +476,20 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
       );
     }
 
+    final displayHistorial = _filtroAprobadorHistorial == 'todos'
+        ? _filteredHistoricalPermissions
+        : _filteredHistoricalPermissions.where((p) {
+            final aprobador = p['aprobador_tipo'] as String?;
+            return aprobador == _filtroAprobadorHistorial;
+          }).toList();
+
     return Column(
       children: [
         // Filtros
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Búsqueda por nombre
               TextField(
@@ -378,9 +513,10 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
                 onChanged: (_) => setState(() => _applyFilters()),
               ),
               const SizedBox(height: 12),
-              // Filtro por estado  
+              // Filtro por estado
               Wrap(
                 spacing: 8,
+                alignment: WrapAlignment.center,
                 children: [
                   FilterChip(
                     label: const Text('Todos'),
@@ -408,7 +544,39 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              // Filtro por aprobador (idéntico al de Pendientes)
+              const Center(
+                child: Text('🔵 Capitán  🟡 Director',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilterChip(
+                    label: const Text('Todos'),
+                    selected: _filtroAprobadorHistorial == 'todos',
+                    onSelected: (_) => setState(() => _filtroAprobadorHistorial = 'todos'),
+                  ),
+                  FilterChip(
+                    label: const Text('Capitán'),
+                    avatar: CircleAvatar(
+                        backgroundColor: Colors.blue[700], radius: 6),
+                    selected: _filtroAprobadorHistorial == 'capitan',
+                    onSelected: (_) => setState(() => _filtroAprobadorHistorial = 'capitan'),
+                  ),
+                  FilterChip(
+                    label: const Text('Director'),
+                    avatar: CircleAvatar(
+                        backgroundColor: Colors.amber[700], radius: 6),
+                    selected: _filtroAprobadorHistorial == 'director',
+                    onSelected: (_) => setState(() => _filtroAprobadorHistorial = 'director'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               // Filtro por rango de fechas
               Row(
                 children: [
@@ -436,7 +604,7 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
                       ),
                     ),
                   ),
-                  if (_dateRange != null) ...[ 
+                  if (_dateRange != null) ...[
                     const SizedBox(width: 8),
                     IconButton(
                       icon: const Icon(Icons.clear),
@@ -454,13 +622,13 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
         ),
         // Lista filtrada
         Expanded(
-          child: _filteredHistoricalPermissions.isEmpty
+          child: displayHistorial.isEmpty
               ? const Center(child: Text('No se encontraron permisos'))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _filteredHistoricalPermissions.length,
+                  itemCount: displayHistorial.length,
                   itemBuilder: (context, index) {
-                    final permission = _filteredHistoricalPermissions[index];
+                    final permission = displayHistorial[index];
                     return _buildPermissionCard(permission, isPending: false);
                   },
                 ),
@@ -469,18 +637,428 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
     );
   }
 
+  Widget _buildReportTab() {
+    final bool canGenerate = _reportMode == 'fechas'
+        ? _reportDateRange != null
+        : _reportSelectedActividadId != null;
+
+    String buttonLabel;
+    if (_isGeneratingReport) {
+      buttonLabel = 'Generando...';
+    } else if (_reportMode == 'fechas' && _reportDateRange == null) {
+      buttonLabel = 'Seleccione un rango de fechas';
+    } else if (_reportMode == 'actividad' && _reportSelectedActividadId == null) {
+      buttonLabel = 'Seleccione una actividad';
+    } else {
+      buttonLabel = 'Generar Reporte PDF';
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Selector de modo ──
+          const Text('Modo de reporte', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: AppTheme.institutionalRed,
+              selectedForegroundColor: Colors.white,
+            ),
+            segments: const [
+              ButtonSegment(
+                value: 'fechas',
+                label: Text('Por rango de fechas'),
+                icon: Icon(Icons.date_range),
+              ),
+              ButtonSegment(
+                value: 'actividad',
+                label: Text('Por actividad'),
+                icon: Icon(Icons.event),
+              ),
+            ],
+            selected: {_reportMode},
+            onSelectionChanged: (val) => setState(() {
+              _reportMode = val.first;
+              if (_reportMode == 'fechas') {
+                _reportSelectedActividadId = null;
+                _reportSelectedActividadName = null;
+              } else {
+                _reportDateRange = null;
+                _reportSelectedUserId = null;
+                _reportSelectedUserName = null;
+              }
+            }),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Filtros condicionales por modo ──
+          if (_reportMode == 'actividad') ...[
+            const Text('Actividad', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _reportSelectedActividadId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Seleccionar actividad',
+                prefixIcon: Icon(Icons.event),
+              ),
+              items: _reportActividades.map((act) {
+                final title = act['title'] as String? ?? '';
+                final dateRaw = act['activity_date'] as String?;
+                String fechaLabel = '';
+                if (dateRaw != null) {
+                  try {
+                    fechaLabel = DateFormat('dd/MMM', 'es').format(DateTime.parse(dateRaw));
+                  } catch (_) {}
+                }
+                return DropdownMenuItem<String>(
+                  value: act['id'] as String,
+                  child: Text('$fechaLabel — $title', overflow: TextOverflow.ellipsis),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() {
+                _reportSelectedActividadId = val;
+                if (val == null) {
+                  _reportSelectedActividadName = null;
+                } else {
+                  try {
+                    _reportSelectedActividadName = _reportActividades
+                        .firstWhere((a) => a['id'] == val)['title'] as String?;
+                  } catch (_) {
+                    _reportSelectedActividadName = null;
+                  }
+                }
+              }),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          if (_reportMode == 'fechas') ...[
+            const Text('Rango de fechas', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                        initialDateRange: _reportDateRange,
+                      );
+                      if (picked != null) setState(() => _reportDateRange = picked);
+                    },
+                    icon: const Icon(Icons.date_range),
+                    label: Text(
+                      _reportDateRange == null
+                          ? 'Seleccionar rango'
+                          : '${DateFormat('dd/MM/yyyy').format(_reportDateRange!.start)} — ${DateFormat('dd/MM/yyyy').format(_reportDateRange!.end)}',
+                    ),
+                  ),
+                ),
+                if (_reportDateRange != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => _reportDateRange = null),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text('Filtrar por bombero (opcional)', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _reportSelectedUserId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Todos los bomberos',
+                prefixIcon: Icon(Icons.person_search),
+              ),
+              items: [
+                const DropdownMenuItem<String>(value: null, child: Text('— Todos los bomberos —')),
+                ..._reportUsers.map((u) => DropdownMenuItem<String>(
+                      value: u.id,
+                      child: Text(u.fullName),
+                    )),
+              ],
+              onChanged: (val) => setState(() {
+                _reportSelectedUserId = val;
+                if (val == null) {
+                  _reportSelectedUserName = null;
+                } else {
+                  try {
+                    _reportSelectedUserName =
+                        _reportUsers.firstWhere((u) => u.id == val).fullName;
+                  } catch (_) {
+                    _reportSelectedUserName = null;
+                  }
+                }
+              }),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // ── Tipo de permiso (ambos modos) ──
+          const Text('Tipo de Permiso', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: AppTheme.institutionalRed,
+              selectedForegroundColor: Colors.white,
+            ),
+            segments: const [
+              ButtonSegment(value: 'all', label: Text('Ambos')),
+              ButtonSegment(value: 'approved', label: Text('Aprobados')),
+              ButtonSegment(value: 'rejected', label: Text('Rechazados')),
+            ],
+            selected: {_reportStatusFilter},
+            onSelectionChanged: (val) => setState(() => _reportStatusFilter = val.first),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Filtro por aprobador (ambos modos) ──
+          const Text('Filtrar por aprobador', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text('🔵 Capitán  🟡 Director', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilterChip(
+                label: const Text('Todos'),
+                selected: _reportAprobador == 'todos',
+                onSelected: (_) => setState(() => _reportAprobador = 'todos'),
+              ),
+              FilterChip(
+                label: const Text('Capitán'),
+                avatar: CircleAvatar(backgroundColor: Colors.blue[700], radius: 6),
+                selected: _reportAprobador == 'capitan',
+                onSelected: (_) => setState(() => _reportAprobador = 'capitan'),
+              ),
+              FilterChip(
+                label: const Text('Director'),
+                avatar: CircleAvatar(backgroundColor: Colors.amber[700], radius: 6),
+                selected: _reportAprobador == 'director',
+                onSelected: (_) => setState(() => _reportAprobador = 'director'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // ── Botón generar ──
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: !canGenerate || _isGeneratingReport ? null : _generateReportFromTab,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.institutionalRed,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              icon: _isGeneratingReport
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.picture_as_pdf),
+              label: Text(
+                buttonLabel,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _generateReportFromTab() async {
+    setState(() => _isGeneratingReport = true);
+    try {
+      List<Map<String, dynamic>> permissions = [];
+
+      if (_reportMode == 'fechas') {
+        if (_reportDateRange == null) return;
+
+        if (_reportStatusFilter == 'approved' || _reportStatusFilter == 'all') {
+          final approved = await _supabase.getApprovedPermissionsBetweenDates(
+            _reportDateRange!.start,
+            _reportDateRange!.end,
+            userId: _reportSelectedUserId,
+          );
+          permissions.addAll(approved);
+        }
+        if (_reportStatusFilter == 'rejected' || _reportStatusFilter == 'all') {
+          final rejected = await _supabase.getPermissionsByStatusBetweenDates(
+            'rejected',
+            _reportDateRange!.start,
+            _reportDateRange!.end,
+            userId: _reportSelectedUserId,
+          );
+          permissions.addAll(rejected);
+        }
+      } else {
+        if (_reportSelectedActividadId == null) return;
+
+        var query = _supabase.client
+            .from('permissions')
+            .select('*, user:users!permissions_user_id_fkey(*), activity:activities(*)')
+            .eq('actividad_id', _reportSelectedActividadId!);
+
+        if (_reportStatusFilter == 'approved') {
+          query = query.eq('status', 'approved');
+        } else if (_reportStatusFilter == 'rejected') {
+          query = query.eq('status', 'rejected');
+        } else {
+          query = query.inFilter('status', ['approved', 'rejected']);
+        }
+
+        final result = await query.order('created_at', ascending: true);
+        permissions = List<Map<String, dynamic>>.from(result as List);
+
+        // También traer permisos por período que cubren la fecha de la actividad
+        final actData = _reportActividades.firstWhere(
+          (a) => a['id'] == _reportSelectedActividadId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (actData['activity_date'] != null) {
+          final actDateStr = actData['activity_date'] as String;
+          List<Map<String, dynamic>> datePermissions = [];
+
+          if (_reportStatusFilter == 'approved' || _reportStatusFilter == 'all') {
+            final approved = await _supabase.client
+                .from('permissions')
+                .select('*, user:users!permissions_user_id_fkey(*), activity:activities(*)')
+                .eq('status', 'approved')
+                .eq('tipo_permiso', 'fecha')
+                .lte('start_date', actDateStr)
+                .gte('end_date', actDateStr)
+                .order('created_at', ascending: true);
+            datePermissions.addAll(List<Map<String, dynamic>>.from(approved as List));
+          }
+
+          if (_reportStatusFilter == 'rejected' || _reportStatusFilter == 'all') {
+            final rejected = await _supabase.client
+                .from('permissions')
+                .select('*, user:users!permissions_user_id_fkey(*), activity:activities(*)')
+                .eq('status', 'rejected')
+                .eq('tipo_permiso', 'fecha')
+                .lte('start_date', actDateStr)
+                .gte('end_date', actDateStr)
+                .order('created_at', ascending: true);
+            datePermissions.addAll(List<Map<String, dynamic>>.from(rejected as List));
+          }
+
+          for (var p in permissions) {
+            p['_report_group'] = 'actividad';
+          }
+          for (var p in datePermissions) {
+            p['_report_group'] = 'periodo';
+          }
+
+          final existingIds = permissions.map((p) => p['id']).toSet();
+          for (var p in datePermissions) {
+            if (!existingIds.contains(p['id'])) {
+              permissions.add(p);
+            }
+          }
+        }
+      }
+
+      // Filtrar por aprobador (aplica en ambos modos)
+      if (_reportAprobador != 'todos') {
+        permissions = permissions.where((p) {
+          return p['aprobador_tipo'] == _reportAprobador;
+        }).toList();
+      }
+
+      permissions.sort((a, b) {
+        final sa = a['start_date'] as String?;
+        final sb = b['start_date'] as String?;
+        if (sa == null && sb == null) return 0;
+        if (sa == null) return 1;
+        if (sb == null) return -1;
+        return sa.compareTo(sb);
+      });
+
+      if (_reportMode == 'actividad') {
+        final actData = _reportActividades.firstWhere(
+          (a) => a['id'] == _reportSelectedActividadId,
+          orElse: () => {},
+        );
+        final actDate = actData['activity_date'] != null
+            ? DateTime.parse(actData['activity_date'])
+            : DateTime.now();
+        await _pdfService.generatePermissionsReport(
+          permissions: permissions,
+          startDate: actDate,
+          endDate: actDate,
+          firefighterName: null,
+          statusFilter: _reportStatusFilter,
+          activityName: _reportSelectedActividadName,
+          groupByType: true,
+        );
+      } else {
+        await _pdfService.generatePermissionsReport(
+          permissions: permissions,
+          startDate: _reportDateRange!.start,
+          endDate: _reportDateRange!.end,
+          firefighterName: _reportSelectedUserName,
+          statusFilter: _reportStatusFilter,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generando reporte: $e'),
+            backgroundColor: AppTheme.criticalColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingReport = false);
+    }
+  }
+
   Widget _buildPermissionCard(Map<String, dynamic> permission,
       {required bool isPending}) {
     final user = permission['user'] as Map<String, dynamic>;
-    final startDate = DateTime.parse(permission['start_date']);
-    final endDate = DateTime.parse(permission['end_date']);
     final status = permission['status'] as String;
+    final tipoPermiso = permission['tipo_permiso'] as String? ?? 'fecha';
+    final startDateStr = permission['start_date'] as String?;
+    final endDateStr = permission['end_date'] as String?;
+    final aprobadorTipo = permission['aprobador_tipo'] as String?;
+
+    // Color del borde lateral según aprobador
+    Color borderColor;
+    if (aprobadorTipo == 'capitan') {
+      borderColor = Colors.blue[700]!;
+    } else if (aprobadorTipo == 'director') {
+      borderColor = Colors.amber[700]!;
+    } else {
+      borderColor = Colors.grey.shade300;
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () => _showPermissionDetail(permission),
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: borderColor, width: 5.2),
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              bottomLeft: Radius.circular(4),
+            ),
+          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,16 +1098,56 @@ class _ManagePermissionsScreenState extends State<ManagePermissionsScreen>
                 ],
               ),
               const SizedBox(height: 12),
+              // Tipo de permiso + período o actividad
               Row(
                 children: [
-                  const Icon(Icons.calendar_today, size: 16),
+                  Icon(
+                    tipoPermiso == 'actividad' ? Icons.event : Icons.date_range,
+                    size: 16,
+                    color: tipoPermiso == 'actividad' ? Colors.orange[700] : Colors.blue[700],
+                  ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${DateFormat('dd/MM/yyyy').format(startDate)} - ${DateFormat('dd/MM/yyyy').format(endDate)}',
-                    style: const TextStyle(fontSize: 14),
+                  Builder(
+                    builder: (context) {
+                      if (tipoPermiso == 'actividad') {
+                        final activity = permission['activity'] as Map<String, dynamic>?;
+                        if (activity != null) {
+                           final actDate = DateTime.parse(activity['activity_date']);
+                           return Expanded(
+                             child: Text(
+                               "\u{1F4C5} ${activity['title']} \u2014 ${DateFormat('dd/MM/yyyy').format(actDate)}",
+                               style: const TextStyle(fontSize: 14),
+                               overflow: TextOverflow.ellipsis,
+                             ),
+                           );
+                        } else {
+                           return const Text(
+                             '\u{1F4C5} Actividad no encontrada',
+                             style: TextStyle(fontSize: 14),
+                           );
+                        }
+                      } else {
+                        return Text(
+                          startDateStr != null && endDateStr != null
+                              ? '${DateFormat('dd/MM/yyyy').format(DateTime.parse(startDateStr))} - ${DateFormat('dd/MM/yyyy').format(DateTime.parse(endDateStr))}'
+                              : '\u{1F4C6} Permiso por Fechas',
+                          style: const TextStyle(fontSize: 14),
+                        );
+                      }
+                    },
                   ),
                 ],
               ),
+              if (tipoPermiso == 'actividad') ...[
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 24),
+                  child: Text(
+                    'Aprobador: ${aprobadorTipo == 'capitan' ? 'Capitán' : 'Director'}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 permission['reason'],
@@ -713,8 +1331,11 @@ class _PermissionDetailDialogState extends State<_PermissionDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final user = widget.permission['user'] as Map<String, dynamic>;
-    final startDate = DateTime.parse(widget.permission['start_date']);
-    final endDate = DateTime.parse(widget.permission['end_date']);
+    final tipoPermiso = widget.permission['tipo_permiso'] as String? ?? 'fecha';
+    final startDateStr = widget.permission['start_date'] as String?;
+    final endDateStr = widget.permission['end_date'] as String?;
+    final startDate = startDateStr != null ? DateTime.parse(startDateStr) : null;
+    final endDate = endDateStr != null ? DateTime.parse(endDateStr) : null;
     final status = widget.permission['status'] as String;
     final isProcessed = status != 'pending';
 
@@ -741,28 +1362,62 @@ class _PermissionDetailDialogState extends State<_PermissionDetailDialog> {
             ),
             const Divider(height: 24),
 
-            // Fechas
+            // Período o Actividad
             Text(
-              'Período Solicitado',
+              tipoPermiso == 'actividad' ? 'Permiso por Actividad' : 'Período Solicitado',
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const SizedBox(height: 4),
-            Text(
-              'Desde: ${DateFormat('dd/MM/yyyy').format(startDate)}',
-              style: const TextStyle(fontSize: 15),
-            ),
-            Text(
-              'Hasta: ${DateFormat('dd/MM/yyyy').format(endDate)}',
-              style: const TextStyle(fontSize: 15),
-            ),
-            Text(
-              'Duración: ${endDate.difference(startDate).inDays + 1} días',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
+            if (tipoPermiso == 'actividad') ...[
+              Row(
+                children: [
+                  const Icon(Icons.event, size: 18, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final activity = widget.permission['activity'] as Map<String, dynamic>?;
+                        if (activity != null) {
+                          final actDate = DateTime.parse(activity['activity_date']);
+                          return Text(
+                            "${activity['title']} — ${DateFormat('dd/MM/yyyy').format(actDate)}",
+                            style: const TextStyle(fontSize: 14),
+                          );
+                        } else {
+                          return const Text(
+                            "Actividad no encontrada",
+                            style: TextStyle(fontSize: 14),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 4),
+              Text(
+                'Aprobador: ${widget.permission['aprobador_tipo'] == 'capitan' ? 'Capitán' : 'Director'}',
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              ),
+            ] else ...[
+              Text(
+                'Desde: ${startDate != null ? DateFormat('dd/MM/yyyy').format(startDate) : '-'}',
+                style: const TextStyle(fontSize: 15),
+              ),
+              Text(
+                'Hasta: ${endDate != null ? DateFormat('dd/MM/yyyy').format(endDate) : '-'}',
+                style: const TextStyle(fontSize: 15),
+              ),
+              if (startDate != null && endDate != null)
+                Text(
+                  'Duración: ${endDate.difference(startDate).inDays + 1} días',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+            ],
             const Divider(height: 24),
 
             // Motivo

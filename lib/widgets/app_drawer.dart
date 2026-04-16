@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sexta_app/core/constants/app_constants.dart';
 import 'package:sexta_app/core/theme/app_theme.dart';
 import 'package:sexta_app/services/auth_service.dart';
 import 'package:sexta_app/models/user_model.dart';
@@ -59,14 +60,29 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.local_fire_department,
-                      size: 36,
-                      color: AppTheme.institutionalRed,
-                    ),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: Colors.white,
+                        child: Icon(
+                          Icons.local_fire_department,
+                          size: 36,
+                          color: AppTheme.institutionalRed,
+                        ),
+                      ),
+                      Text(
+                        AppConstants.appVersion,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -177,7 +193,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   icon: Icons.light_mode,
                   title: 'Asist. Guardia Diurna',
                   route: '/guard-diurna',
-                  visible: true,
+                  visible: userRole == UserRole.admin,
                 ),
                 _buildMenuItem(
                   context,
@@ -276,6 +292,24 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   title: 'Feriados',
                   route: '/holidays',
                   visible: userRole == UserRole.admin || userRole == UserRole.oficial1,
+                ),
+                const Divider(),
+                _buildMenuSection('RIFA'),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.confirmation_number,
+                  title: 'Rifa 2026',
+                  route: '/rifa',
+                  visible: userRole == UserRole.admin || userRole == UserRole.oficial6 || userRole == UserRole.oficial2,
+                ),
+                const Divider(),
+                _buildMenuSection('REPORTES'),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.assessment,
+                  title: 'Reportes Mensuales',
+                  route: '/reports',
+                  visible: RolePermissions.canAccessReports(userRole),
                 ),
               ],
             ),

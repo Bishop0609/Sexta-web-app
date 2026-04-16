@@ -12,6 +12,10 @@ import 'package:sexta_app/models/activity_model.dart';
 import 'package:intl/intl.dart';
 import 'package:sexta_app/core/permissions/role_permissions.dart';
 import 'package:sexta_app/screens/dashboard/widgets/weekly_calendar.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sexta_app/features/dashboard/presentation/providers/birthday_provider.dart';
+import 'package:sexta_app/features/dashboard/presentation/widgets/birthday_banner.dart';
+import 'widgets/rifa_status_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -116,6 +120,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Birthday Banner
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final isBirthdayAsync = ref.watch(birthdayProvider);
+                      return isBirthdayAsync.when(
+                        data: (isBirthday) => isBirthday 
+                            ? const BirthdayBanner() 
+                            : const SizedBox.shrink(),
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                      );
+                    },
+                  ),
+                  
                   // 1. Header (Inline)
                   _buildHeader(),
                   LayoutBuilder(
@@ -152,6 +170,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // 4. Stats Grid (Citations, Emergencies, Next Guard)
                   _buildStatsSection(),
                   const SizedBox(height: 24),
+
+                  // Rifa Status
+                  if (_currentUser != null) ...[
+                    const SizedBox(height: 16),
+                    RifaStatusCard(userId: _currentUser!.id),
+                    const SizedBox(height: 8),
+                  ],
                   
                   // 5. Monthly Chart
                   _buildMonthlyChart(),
@@ -247,8 +272,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 children: [
                   Expanded(child: _buildActionButton('Asist. Guardia FDS', Icons.weekend, () => context.go('/guard-fds'), color: const Color(0xFFFCE4EC))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildActionButton('Asist. Guardia Lu-Vi', Icons.calendar_today, () => context.go('/guard-diurna'), color: const Color(0xFFE0F7FA))),
+                  if (_currentUser?.role == UserRole.admin) ...[
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildActionButton('Asist. Guardia Lu-Vi', Icons.calendar_today, () => context.go('/guard-diurna'), color: const Color(0xFFE0F7FA))),
+                  ],
                 ],
               ),
             ],
@@ -279,10 +306,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: (constraints.maxWidth - 36) / 3,
                 child: _buildActionButton('Asist. Guardia FDS', Icons.weekend, () => context.go('/guard-fds'), color: const Color(0xFFFCE4EC)),
               ),
-              SizedBox(
-                width: (constraints.maxWidth - 36) / 3,
-                child: _buildActionButton('Asist. Guardia Lu-Vi', Icons.calendar_today, () => context.go('/guard-diurna'), color: const Color(0xFFE0F7FA)),
-              ),
+              if (_currentUser?.role == UserRole.admin)
+                SizedBox(
+                  width: (constraints.maxWidth - 36) / 3,
+                  child: _buildActionButton('Asist. Guardia Lu-Vi', Icons.calendar_today, () => context.go('/guard-diurna'), color: const Color(0xFFE0F7FA)),
+                ),
             ],
           );
         }

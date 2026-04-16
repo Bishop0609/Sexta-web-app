@@ -8,6 +8,8 @@ import 'package:sexta_app/services/supabase_service.dart';
 import 'package:sexta_app/models/user_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:sexta_app/screens/dashboard/widgets/guard_completeness_widget.dart';
+import 'package:sexta_app/screens/dashboard/widgets/viper_control_widget.dart';
 
 class CompanyDashboardScreen extends ConsumerStatefulWidget {
   const CompanyDashboardScreen({super.key});
@@ -31,6 +33,10 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
   // Selected user stats (when filtered)
   Map<String, dynamic>? _userStats;
   List<Map<String, dynamic>> _userMonthlyStats = [];
+
+  // Mes/año seleccionado para gráficos de usuario
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
 
   @override
   void initState() {
@@ -93,9 +99,11 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
       if ([
         'Academia de Compañía',
         'Academia de Cuerpo',
-        'Citación de Comandancia',
-        'Citación de Superintendencia',
-        'Reunión de Compañía'
+        'Reunión Ordinaria',
+        'Reunión Extraordinaria',
+        'Citación de Compañía',
+        'Citación de Cuerpo',
+        'Otra Actividad'
       ].contains(actTypeName)) {
         totalCitations++;
       } else if (actTypeName == 'Emergencia') {
@@ -147,9 +155,11 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
       if ([
         'Academia de Compañía',
         'Academia de Cuerpo',
-        'Citación de Comandancia',
-        'Citación de Superintendencia',
-        'Reunión de Compañía'
+        'Reunión Ordinaria',
+        'Reunión Extraordinaria',
+        'Citación de Compañía',
+        'Citación de Cuerpo',
+        'Otra Actividad'
       ].contains(actTypeName)) {
         monthlyData[monthKey]!['citation'] = (monthlyData[monthKey]!['citation'] ?? 0) + 1;
       } else if (actTypeName == 'Emergencia') {
@@ -197,13 +207,15 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
     return completeResult;
   }
 
-  Future<void> _loadUserStats(String userId) async {
+  Future<void> _loadUserStats(String userId, {int? month, int? year}) async {
     setState(() => _isLoading = true);
-    
     try {
-      final userStats = await _attendanceService.calculateCitationAndEmergencyStats(userId);
+      final userStats = await _attendanceService.calculateCitationAndEmergencyStats(
+        userId,
+        month: month ?? _selectedMonth,
+        year: year ?? _selectedYear,
+      );
       final userMonthly = await _attendanceService.calculateMonthlyAttendanceByType(userId);
-
       setState(() {
         _userStats = userStats;
         _userMonthlyStats = userMonthly;
@@ -390,37 +402,72 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
       
       // Monthly chart
       _buildMonthlyChart(_companyMonthlyStats, 'Compañía - Últimos 6 Meses'),
+      const SizedBox(height: 16),
+      const GuardCompletenessWidget(),
+      const SizedBox(height: 16),
+      const ViperControlWidget(),
     ];
   }
 
   List<Widget> _buildUserStats() {
     if (_userStats == null) return [];
 
-    final citationPct = _userStats!['citation_pct'] as double;
-    final emergencyPct = _userStats!['emergency_pct'] as double;
-    final citationCount = _userStats!['citation_count'] as int;
-    final emergencyCount = _userStats!['emergency_count'] as int;
-    final totalCitations = _userStats!['total_citation_events'] as int;
-    final totalEmergencies = _userStats!['total_emergency_events'] as int;
-    final monthName = _userStats!['month_name'] as String;
+    final citationPct = (_userStats!['month_citation_pct'] as num?)?.toDouble() ?? 0.0;
+    final emergencyPct = (_userStats!['month_emergency_pct'] as num?)?.toDouble() ?? 0.0;
+    final citationCount = (_userStats!['month_citation_count'] as int?) ?? 0;
+    final emergencyCount = (_userStats!['month_emergency_count'] as int?) ?? 0;
+    final totalCitations = (_userStats!['month_total_citation_events'] as int?) ?? 0;
+    final totalEmergencies = (_userStats!['month_total_emergency_events'] as int?) ?? 0;
+
+    const monthNames = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    final currentYear = DateTime.now().year;
 
     return [
-      // Current month pie charts
       Card(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Desempeño de ${_selectedUser!.fullName} - $monthName',
-                style: Theme.of(context).textTheme.titleLarge,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Desempeño de ${_selectedUser!.fullName}',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  DropdownButton<int>(
+                    value: _selectedMonth,
+                    items: List.generate(12, (i) => DropdownMenuItem(
+                      value: i + 1,
+                      child: Text(monthNames[i + 1]),
+                    )),
+                    onChanged: (val) {
+                      if (val == null) return;
+                      setState(() => _selectedMonth = val);
+                      _loadUserStats(_selectedUser!.id, month: val, year: _selectedYear);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: _selectedYear,
+                    items: [currentYear - 2, currentYear - 1, currentYear]
+                        .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val == null) return;
+                      setState(() => _selectedYear = val);
+                      _loadUserStats(_selectedUser!.id, month: _selectedMonth, year: val);
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth > 600;
-                  
                   if (isWide) {
                     return Row(
                       children: [
@@ -445,8 +492,6 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
         ),
       ),
       const SizedBox(height: 16),
-      
-      // Monthly chart
       _buildMonthlyChart(_userMonthlyStats, '${_selectedUser!.fullName} - Últimos 6 Meses'),
     ];
   }
@@ -482,8 +527,9 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
   }
 
   Widget _buildCitationChart(double percentage, int attended, int total) {
-    final absentPct = 100 - percentage;
-    
+    final hasEvents = total > 0;
+    final absentPct = hasEvents ? 100.0 - percentage : 0.0;
+
     return Column(
       children: [
         const Text(
@@ -496,39 +542,50 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
           height: 150,
           child: PieChart(
             PieChartData(
-              sections: [
-                PieChartSectionData(
-                  value: percentage,
-                  color: Colors.blue,
-                  title: '${percentage.toStringAsFixed(1)}%',
-                  titleStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  radius: 60,
-                ),
-                if (absentPct > 0)
-                  PieChartSectionData(
-                    value: absentPct,
-                    color: Colors.grey[300]!,
-                    title: '${absentPct.toStringAsFixed(1)}%',
-                    titleStyle: TextStyle(
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                    radius: 50,
-                  ),
-              ],
-              sectionsSpace: 2,
+              sections: hasEvents
+                  ? [
+                      if (percentage > 0)
+                        PieChartSectionData(
+                          value: percentage,
+                          color: Colors.blue,
+                          title: '${percentage.toStringAsFixed(1)}%',
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          radius: 60,
+                        ),
+                      if (absentPct > 0)
+                        PieChartSectionData(
+                          value: absentPct,
+                          color: Colors.grey[300]!,
+                          title: '${absentPct.toStringAsFixed(1)}%',
+                          titleStyle: TextStyle(
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          radius: 50,
+                        ),
+                    ]
+                  : [
+                      PieChartSectionData(
+                        value: 100,
+                        color: Colors.grey[300]!,
+                        title: 'Sin eventos',
+                        titleStyle: TextStyle(color: Colors.grey[600], fontSize: 11),
+                        radius: 60,
+                      ),
+                    ],
+              sectionsSpace: hasEvents && percentage > 0 ? 2 : 0,
               centerSpaceRadius: 0,
             ),
           ),
         ),
         const SizedBox(height: 12),
         Text(
-          '$attended de $total citaciones',
+          hasEvents ? '$attended de $total citaciones' : 'Sin citaciones en este mes',
           style: const TextStyle(fontSize: 14, color: Colors.grey),
         ),
       ],
@@ -536,8 +593,9 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
   }
 
   Widget _buildEmergencyChart(double percentage, int attended, int total) {
-    final absentPct = 100 - percentage;
-    
+    final hasEvents = total > 0;
+    final absentPct = hasEvents ? 100.0 - percentage : 0.0;
+
     return Column(
       children: [
         const Text(
@@ -550,39 +608,50 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
           height: 150,
           child: PieChart(
             PieChartData(
-              sections: [
-                PieChartSectionData(
-                  value: percentage,
-                  color: Colors.red,
-                  title: '${percentage.toStringAsFixed(1)}%',
-                  titleStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  radius: 60,
-                ),
-                if (absentPct > 0)
-                  PieChartSectionData(
-                    value: absentPct,
-                    color: Colors.grey[300]!,
-                    title: '${absentPct.toStringAsFixed(1)}%',
-                    titleStyle: TextStyle(
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                    radius: 50,
-                  ),
-              ],
-              sectionsSpace: 2,
+              sections: hasEvents
+                  ? [
+                      if (percentage > 0)
+                        PieChartSectionData(
+                          value: percentage,
+                          color: Colors.red,
+                          title: '${percentage.toStringAsFixed(1)}%',
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          radius: 60,
+                        ),
+                      if (absentPct > 0)
+                        PieChartSectionData(
+                          value: absentPct,
+                          color: Colors.grey[300]!,
+                          title: '${absentPct.toStringAsFixed(1)}%',
+                          titleStyle: TextStyle(
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          radius: 50,
+                        ),
+                    ]
+                  : [
+                      PieChartSectionData(
+                        value: 100,
+                        color: Colors.grey[300]!,
+                        title: 'Sin eventos',
+                        titleStyle: TextStyle(color: Colors.grey[600], fontSize: 11),
+                        radius: 60,
+                      ),
+                    ],
+              sectionsSpace: hasEvents && percentage > 0 ? 2 : 0,
               centerSpaceRadius: 0,
             ),
           ),
         ),
         const SizedBox(height: 12),
         Text(
-          '$attended de $total emergencias',
+          hasEvents ? '$attended de $total emergencias' : 'Sin emergencias en este mes',
           style: const TextStyle(fontSize: 14, color: Colors.grey),
         ),
       ],
@@ -618,6 +687,7 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
+                  minY: 0,
                   maxY: _getMaxY(stats),
                   barGroups: _buildBarGroups(stats),
                   titlesData: FlTitlesData(
@@ -625,10 +695,14 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 40,
-                        getTitlesWidget: (value, meta) => Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(fontSize: 12),
-                        ),
+                        interval: _getYAxisInterval(_getMaxY(stats)),
+                        getTitlesWidget: (value, meta) {
+                          if (value != value.roundToDouble()) return const SizedBox.shrink();
+                          return Text(
+                            value.toInt().toString(),
+                            style: const TextStyle(fontSize: 12),
+                          );
+                        },
                       ),
                     ),
                     bottomTitles: AxisTitles(
@@ -706,6 +780,13 @@ class _CompanyDashboardScreenState extends ConsumerState<CompanyDashboardScreen>
     // Agregar 20% de margen o mínimo 2 unidades
     final margin = max * 0.2;
     return (max + (margin < 2 ? 2 : margin)).ceilToDouble();
+  }
+
+  double _getYAxisInterval(double maxY) {
+    if (maxY <= 5) return 1;
+    if (maxY <= 10) return 2;
+    if (maxY <= 20) return 5;
+    return (maxY / 5).ceilToDouble();
   }
 
   Widget _buildLegendItem(String label, Color color) {

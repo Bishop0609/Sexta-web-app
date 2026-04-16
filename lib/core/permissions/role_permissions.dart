@@ -56,6 +56,7 @@ class RolePermissions {
     return [
       UserRole.admin,
       UserRole.oficial1,
+      UserRole.oficial2,
       UserRole.oficial3,
     ].contains(role);
   }
@@ -158,6 +159,27 @@ class RolePermissions {
     return [
       UserRole.admin,
       UserRole.oficial1,
+      UserRole.oficial2,
+      UserRole.oficial3,
+    ].contains(role);
+  }
+
+  /// Crear usuarios: Admin, Oficial1, Oficial2, Oficial3
+  static bool canCreateUsers(UserRole role) {
+    return [
+      UserRole.admin,
+      UserRole.oficial1,
+      UserRole.oficial2,
+      UserRole.oficial3,
+    ].contains(role);
+  }
+
+  /// Eliminar usuarios: Admin, Oficial1, Oficial2, Oficial3
+  static bool canDeleteUsers(UserRole role) {
+    return [
+      UserRole.admin,
+      UserRole.oficial1,
+      UserRole.oficial2,
       UserRole.oficial3,
     ].contains(role);
   }
@@ -212,6 +234,19 @@ class RolePermissions {
   /// Generar reportes de tesorería: Admin, Oficial1, Oficial6
   static bool canGenerateTreasuryReports(UserRole role) {
     return canAccessTreasury(role);
+  }
+
+  // ============================================
+  // REPORTES
+  // ============================================
+
+  /// Acceder a reportes de asistencia: Admin, Oficial1, Oficial3
+  static bool canAccessReports(UserRole role) {
+    return [
+      UserRole.admin,
+      UserRole.oficial1,
+      UserRole.oficial3,
+    ].contains(role);
   }
 
   // ============================================

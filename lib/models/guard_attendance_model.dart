@@ -17,6 +17,7 @@ class GuardAttendanceFds {
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? modifiedBy;
   
   // Populated user objects
   UserModel? maquinista1;
@@ -36,6 +37,7 @@ class GuardAttendanceFds {
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.modifiedBy,
     this.maquinista1,
     this.maquinista2,
     this.obac,
@@ -66,6 +68,7 @@ class GuardAttendanceFds {
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      modifiedBy: json['modified_by'] as String?,
     );
   }
 
@@ -91,6 +94,7 @@ class GuardAttendanceFds {
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'modified_by': modifiedBy,
     };
   }
 
@@ -135,6 +139,7 @@ class GuardAttendanceDiurna {
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? modifiedBy;
   
   // Populated user objects
   UserModel? maquinista1;
@@ -154,6 +159,7 @@ class GuardAttendanceDiurna {
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.modifiedBy,
     this.maquinista1,
     this.maquinista2,
     this.obac,
@@ -184,6 +190,7 @@ class GuardAttendanceDiurna {
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      modifiedBy: json['modified_by'] as String?,
     );
   }
 
@@ -209,6 +216,7 @@ class GuardAttendanceDiurna {
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'modified_by': modifiedBy,
     };
   }
 
@@ -250,6 +258,7 @@ class GuardAttendanceNocturna {
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? modifiedBy;
   
   // Populated user objects
   UserModel? maquinista;
@@ -270,6 +279,7 @@ class GuardAttendanceNocturna {
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.modifiedBy,
     this.maquinista,
     this.obac,
     List<UserModel?>? bomberos,
@@ -298,6 +308,7 @@ class GuardAttendanceNocturna {
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      modifiedBy: json['modified_by'] as String?,
     );
   }
 
@@ -320,6 +331,7 @@ class GuardAttendanceNocturna {
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'modified_by': modifiedBy,
     };
   }
 

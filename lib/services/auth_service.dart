@@ -1,7 +1,6 @@
 import 'dart:convert';
-import 'dart:math';
-import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sexta_app/models/user_model.dart';
 import 'package:sexta_app/services/supabase_service.dart';
 
@@ -72,67 +71,74 @@ class AuthService {
 
   /// Login with RUT and password
   Future<LoginResult> login(String rut, String password) async {
+    // 1. Get user by RUT
+    final user = await _supabase.getUserByRut(rut);
+    if (user == null) {
+      return LoginResult.failure('RUT no encontrado');
+    }
+
+    // 2. Verificar que tenga email
+    if (user.email == null || user.email!.isEmpty) {
+      return LoginResult.failure('Usuario sin email configurado');
+    }
+
+    // 2.5 Verificar que el usuario esté activo
+    if (!user.isActive) {
+      String statusMsg;
+      switch (user.status) {
+        case UserStatus.suspendido:
+          statusMsg = 'Su cuenta se encuentra suspendida';
+        case UserStatus.renunciado:
+          statusMsg = 'Su cuenta fue desactivada por renuncia';
+        case UserStatus.expulsado:
+          statusMsg = 'Su cuenta fue desactivada por expulsión';
+        case UserStatus.separado:
+          statusMsg = 'Su cuenta fue desactivada por separación';
+        case UserStatus.fallecido:
+          statusMsg = 'Esta cuenta se encuentra deshabilitada';
+        default:
+          statusMsg = 'Su cuenta no está activa';
+      }
+      return LoginResult.failure(statusMsg);
+    }
+
+    // 3. SignIn con Supabase Auth
     try {
-      // 1. Get user by RUT
-      final user = await _supabase.getUserByRut(rut);
-      if (user == null) {
-        return LoginResult.failure('RUT no encontrado');
-      }
-
-      // 2. Get auth credentials
-      final credentials = await _supabase.getAuthCredentials(user.id);
-      if (credentials == null) {
-        return LoginResult.failure('Usuario sin credenciales configuradas');
-      }
-
-      // 3. Check if account is locked
-      if (credentials['locked_until'] != null) {
-        final lockedUntil = DateTime.parse(credentials['locked_until'] as String);
-        if (DateTime.now().isBefore(lockedUntil)) {
-          final minutes = lockedUntil.difference(DateTime.now()).inMinutes;
-          return LoginResult.failure('Cuenta bloqueada. Intenta en $minutes minutos');
-        }
-      }
-
-      // 4. Verify password
-      final passwordHash = credentials['password_hash'] as String;
-      if (!verifyPassword(password, passwordHash)) {
-        // Increment failed attempts
-        await _supabase.incrementFailedAttempts(user.id);
-        final failedAttempts = (credentials['failed_attempts'] as int? ?? 0) + 1;
-        
-        if (failedAttempts >= 5) {
-          await _supabase.lockAccount(user.id, minutes: 15);
-          return LoginResult.failure('Demasiados intentos fallidos. Cuenta bloqueada por 15 minutos');
-        }
-        
-        return LoginResult.failure('Contraseña incorrecta (${5 - failedAttempts} intentos restantes)');
-      }
-
-      // 5. Reset failed attempts and update last login
-      await _supabase.resetFailedAttempts(user.id);
-      await _supabase.updateLastLogin(user.id);
-
-      // 6. Set current user
-      _currentUser = user;
-      
-      // 6.5. Save session to SharedPreferences
-      await _saveSession(user);
-
-      // 7. Check if needs password change
-      final requiresPasswordChange = credentials['requires_password_change'] as bool? ?? false;
-
-      return LoginResult.success(
-        user: user,
-        requiresPasswordChange: requiresPasswordChange,
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: user.email!,
+        password: password,
       );
+    } on AuthException {
+      return LoginResult.failure('Credenciales incorrectas');
     } catch (e) {
       return LoginResult.failure('Error de autenticación: $e');
     }
+
+    // 4. Set current user y guardar sesión
+    _currentUser = user;
+    await _saveSession(user);
+
+    // 5. Consultar requires_password_change desde tabla users
+    final userData = await Supabase.instance.client
+        .from('users')
+        .select('requires_password_change')
+        .eq('id', user.id)
+        .single();
+    final requiresPasswordChange = userData['requires_password_change'] as bool? ?? false;
+
+    return LoginResult.success(
+      user: user,
+      requiresPasswordChange: requiresPasswordChange,
+    );
   }
 
   /// Logout
   Future<void> logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      print('[AuthService] Error signing out from Supabase: $e');
+    }
     _currentUser = null;
     await _clearSession();
     print('✅ Sesión cerrada');
@@ -145,28 +151,38 @@ class AuthService {
     required String newPassword,
   }) async {
     try {
-      // 1. Verify current password
-      final credentials = await _supabase.getAuthCredentials(userId);
-      if (credentials == null) {
-        return ChangePasswordResult.failure('Credenciales no encontradas');
+      // 1. Verificar sesión activa
+      final currentUser = _currentUser;
+      if (currentUser == null || currentUser.email == null) {
+        return ChangePasswordResult.failure('No hay sesión activa');
       }
 
-      final currentHash = credentials['password_hash'] as String;
-      if (!verifyPassword(currentPassword, currentHash)) {
+      // 2. Verificar contraseña actual via signIn
+      try {
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: currentUser.email!,
+          password: currentPassword,
+        );
+      } on AuthException {
         return ChangePasswordResult.failure('Contraseña actual incorrecta');
       }
 
-      // 2. Validate new password
+      // 3. Validar nueva contraseña
       final validation = validatePassword(newPassword);
       if (!validation.isValid) {
         return ChangePasswordResult.failure(validation.message);
       }
 
-      // 3. Hash new password
-      final newHash = hashPassword(newPassword);
+      // 4. Actualizar contraseña en Supabase Auth
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
 
-      // 4. Update password in database
-      await _supabase.updatePassword(userId, newHash);
+      // 5. Marcar requires_password_change = false en tabla users
+      await Supabase.instance.client
+          .from('users')
+          .update({'requires_password_change': false})
+          .eq('id', currentUser.id);
 
       return ChangePasswordResult.success();
     } catch (e) {
@@ -175,73 +191,22 @@ class AuthService {
   }
 
 
-  /// Reset user password (admin only)
-  /// Returns the generated temporary password to show to admin
+  /// Reset user password (admin only) via Edge Function
   Future<ResetPasswordResult> resetUserPassword(String userId) async {
     try {
-      const tempPassword = 'Sexta2026*';
-      final passwordHash = hashPassword(tempPassword);
+      final response = await Supabase.instance.client.functions.invoke(
+        'reset-user-password',
+        body: {'user_id': userId},
+      );
 
-      // Verificar si ya existe fila en auth_credentials
-      final existing = await _supabase.getAuthCredentials(userId);
-
-      if (existing == null) {
-        // Usuario nuevo sin credenciales → INSERT
-        await _supabase.createAuthCredentials(userId, passwordHash);
-      } else {
-        // Ya tiene credenciales → UPDATE
-        await _supabase.updatePasswordWithReset(userId, passwordHash);
+      if (response.status != 200) {
+        final error = response.data?['error'] ?? 'Error desconocido';
+        return ResetPasswordResult.failure('Error reseteando contraseña: $error');
       }
 
-      return ResetPasswordResult.success(temporaryPassword: tempPassword);
+      return ResetPasswordResult.success(temporaryPassword: 'Sexta2026*');
     } catch (e) {
       return ResetPasswordResult.failure('Error reseteando contraseña: $e');
-    }
-  }
-
-  /// Generate secure temporary password
-  String generateTempPassword() {
-    const length = 12;
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#\$%&*';
-    final random = Random.secure();
-    return List.generate(length, (index) => chars[random.nextInt(chars.length)]).join();
-  }
-
-  /// Hash password using SHA-256 with salt
-  String hashPassword(String password) {
-    // Generate salt
-    final salt = _generateSalt();
-    
-    // Combine password and salt
-    final combined = password + salt;
-    
-    // Hash using SHA-256
-    final bytes = utf8.encode(combined);
-    final hash = sha256.convert(bytes);
-    
-    // Store as: salt:hash
-    return '$salt:${hash.toString()}';
-  }
-
-  /// Verify password against hash
-  bool verifyPassword(String password, String storedHash) {
-    try {
-      // Split salt and hash
-      final parts = storedHash.split(':');
-      if (parts.length != 2) return false;
-      
-      final salt = parts[0];
-      final hash = parts[1];
-      
-      // Hash the provided password with the same salt
-      final combined = password + salt;
-      final bytes = utf8.encode(combined);
-      final newHash = sha256.convert(bytes).toString();
-      
-      // Compare hashes
-      return newHash == hash;
-    } catch (e) {
-      return false;
     }
   }
 
@@ -264,13 +229,6 @@ class AuthService {
     }
     
     return PasswordValidation(true, 'Contraseña válida');
-  }
-
-  /// Generate random salt
-  String _generateSalt() {
-    final random = Random.secure();
-    final values = List<int>.generate(32, (i) => random.nextInt(256));
-    return base64Url.encode(values);
   }
 }
 
